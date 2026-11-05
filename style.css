@@ -174,3 +174,8 @@ button.ghost.icon { padding: 4px 9px; font-size: 16px; line-height: 1.2; }
 .tc-row { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 0 0 12px; font-size: 15px; color: #cfe0f2; }
 .tc-row select { font-size: 15px; padding: 6px 8px; }
 @media (max-width: 700px) { .who { flex-direction: row; } .clock { font-size: 15px; min-width: 60px; padding: 3px 8px; } }
+
+/* Bot seviyesi */
+.level-row { display: flex; gap: 6px; margin-top: 8px; }
+.level-row button { flex: 1; padding: 8px 0; background: #0d1520; border: 1px solid #ffffff2a; color: #cfe0f2; font-weight: 700; font-size: 14px; }
+.level-row button.on { background: #ffd16622; border-color: #ffd166; color: #ffd166; }

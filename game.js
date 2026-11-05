@@ -21,7 +21,7 @@ function parseTC(v) {
 const $ = s => document.querySelector(s);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const isWhite = side => side === 0;
-const nameOf = side => (side === ME ? 'Sen' : mode === 'bot' ? 'Bot' : 'Rakip');
+const nameOf = side => (side === ME ? 'Sen' : mode === 'bot' ? 'Bot (' + LEVELS[botLevel].name + ')' : mode === 'tutorial' ? 'Bot' : 'Rakip');
 const topCard = () => S.discard[S.discard.length - 1];
 
 // ---------- oyun mantığı (sadece bot modunda ve host'ta çalışır) ----------
@@ -305,6 +305,14 @@ function askColor(cb) {
 }
 
 // ---------- bot (siyah, side 1) ----------
+// Seviyeler: rastgelelik, hata payı, tehlike ve şah güvenliği ağırlıkları
+const LEVELS = {
+  easy:   { name: 'Kolay', noise: 2.2, blunder: 0.45, hang: 0.15, king: 3,  drawBelow: -4,   smart: false },
+  normal: { name: 'Orta',  noise: 0.35, blunder: 0, hang: 0.75, king: 25, drawBelow: -1.2, smart: false },
+  hard:   { name: 'Zor',   noise: 0.05, blunder: 0, hang: 0.95, king: 32, drawBelow: -0.8, smart: true },
+};
+let botLevel = LEVELS[localStorage.getItem('sahkart-level')] ? localStorage.getItem('sahkart-level') : 'normal';
+
 async function botTurn() {
   const game = S;
   botBusy = true;
@@ -313,9 +321,9 @@ async function botTurn() {
   if (S !== game) return; // bu arada yeni oyun başladı
   botBusy = false;
   if (S.over || mode !== 'bot') return;
-  const best = pickBest(optionsFor(1));
+  const best = pickBest(optionsFor(1), 1, LEVELS[botLevel]);
   if (!best) return drawCard(1);
-  playBot(best);
+  playBot(best, 1, LEVELS[botLevel]);
 }
 
 async function botAfterDraw(opts) {
@@ -326,32 +334,50 @@ async function botAfterDraw(opts) {
   if (S !== game) return;
   botBusy = false;
   if (S.over || mode !== 'bot') return;
-  const best = pickBest(opts);
-  if (best) playBot(best); else passTurn(1);
+  const best = pickBest(opts, 1, LEVELS[botLevel], true);
+  if (best) playBot(best, 1, LEVELS[botLevel]); else passTurn(1);
 }
 
 // En iyi seçeneği seç; hepsi kötüyse (eşik altı) null döner ve bot kart çeker
-function pickBest(opts) {
-  let best = null, bestScore = -1.2;
+function pickBest(opts, side, L, afterDraw = false) {
+  if (!opts.length) return null;
+  const kingCap = opts.find(o => o.move && S.board[o.move.tr][o.move.tc]?.t === 'k');
+  if (kingCap) return kingCap; // şahı almayı hiçbir seviye kaçırmaz
+  if (L.blunder && Math.random() < L.blunder) return opts[Math.floor(Math.random() * opts.length)];
+  let best = null, bestScore = afterDraw && L.smart ? -2 : L.drawBelow;
   for (const o of opts) {
-    const s = evaluate(o, false);
+    const s = evaluate(o, side, L);
     if (s > bestScore) { bestScore = s; best = o; }
   }
   return best;
 }
 
-function playBot(opt) {
-  const color = opt.card.kind === 'wild' ? bestColorFor(1, opt.card) : undefined;
-  play(1, opt, color);
+function playBot(opt, side, L) {
+  const color = opt.card.kind === 'wild' ? bestColorFor(side, opt.card, L) : undefined;
+  play(side, opt, color);
 }
 
-// Bir seçeneği 'white' tarafı açısından puanlar
-function evaluate(opt, white) {
+// Bir seçeneği 'side' tarafı açısından puanlar
+function evaluate(opt, side, L) {
+  const white = isWhite(side);
   const { card, move } = opt;
-  let score = Math.random() * 0.35;
+  const oppCards = S.hands[1 - side].length;
+  const myCards = S.hands[side].length;
+  let score = Math.random() * L.noise;
   if (card.kind === 'skip') score += 1.3;
   if (card.kind === 'draw2') score += 1.1;
-  if (card.kind === 'wild') score -= 1.5; // jokeri boşa harcama
+  if (card.kind === 'wild') score -= L.smart ? 2.5 : 1.5; // jokeri boşa harcama
+  if (L.smart) {
+    // Rakip bitirmek üzereyse onu kart çekmeye zorla
+    if (oppCards <= 2 && (card.kind === 'draw2' || card.kind === 'skip')) score += 3;
+    if (oppCards <= 2 && R.zoneBonus(card, move)) score += 1.5;
+    if (card.kind === 'wild' && oppCards <= 2) score += 1.5;
+    // Elde kalan kartların sonraki turda oynanabilirliği (esneklik)
+    const rest = S.hands[side].filter(c => c.id !== card.id);
+    const nextColor = card.kind === 'wild' ? bestColorFor(side, card, L) : card.color;
+    score += rest.filter(c => R.matches(c, card, nextColor)).length * 0.18;
+    if (myCards <= 3) score += 0.4; // bitirmeye yakınken kart harcamak değerli
+  }
   if (!move) return score;
   if (R.zoneBonus(card, move)) score += 0.7;
 
@@ -369,12 +395,12 @@ function evaluate(opt, white) {
   if (cap) score += V[cap.t];
   if (moved.t !== piece.t) score += 8; // terfi
 
-  // Taşın gittiği kare tehlikede mi? (rakibin uygun kartı olmayabilir, o yüzden 0.75)
+  // Taşın gittiği kare tehlikede mi? (rakibin uygun kartı olmayabilir, o yüzden <1)
   const att = R.minAttacker(b2, move.tr, move.tc, !white);
   if (att) {
     const defended = R.minAttacker(b2, move.tr, move.tc, white);
     const pv = Math.min(V[moved.t], 20);
-    score -= (defended ? Math.max(0, pv - att) : pv) * 0.75;
+    score -= (defended ? Math.max(0, pv - att) : pv) * L.hang;
   }
   if (before && !att) score += Math.min(V[piece.t], 20) * 0.5; // tehditten kaçış
 
@@ -383,10 +409,27 @@ function evaluate(opt, white) {
   const dangerNow = kingNow && R.minAttacker(b, kingNow[0], kingNow[1], !white);
   const myKing = R.findKing(b2, white);
   const dangerAfter = myKing && R.minAttacker(b2, myKing[0], myKing[1], !white);
-  if (dangerAfter && !dangerNow) score -= 25;
-  if (dangerNow && !dangerAfter) score += 25;
+  if (dangerAfter && !dangerNow) score -= L.king;
+  if (dangerNow && !dangerAfter) score += L.king;
   const oppKing = R.findKing(b2, !white);
-  if (oppKing && R.minAttacker(b2, oppKing[0], oppKing[1], white)) score += 2;
+  if (oppKing && R.minAttacker(b2, oppKing[0], oppKing[1], white)) score += L.smart && !att ? 4 : 2;
+
+  if (L.smart) {
+    // Kalan taşlarımızdan biri bu hamleyle korumasız kaldı mı? (en değerli asılı taş)
+    let hangingAfter = 0, hangingNow = 0;
+    for (let r = 0; r < 8; r++)
+      for (let c = 0; c < 8; c++) {
+        const p2 = b2[r][c];
+        if (p2 && p2.w === white && p2.t !== 'k' && !(r === move.tr && c === move.tc)) {
+          if (R.minAttacker(b2, r, c, !white) && !R.minAttacker(b2, r, c, white)) hangingAfter = Math.max(hangingAfter, V[p2.t]);
+        }
+        const p1 = b[r][c];
+        if (p1 && p1.w === white && p1.t !== 'k' && !(r === move.fr && c === move.fc)) {
+          if (R.minAttacker(b, r, c, !white) && !R.minAttacker(b, r, c, white)) hangingNow = Math.max(hangingNow, V[p1.t]);
+        }
+      }
+    score -= Math.max(0, hangingAfter - hangingNow) * 0.5;
+  }
 
   const centre = 3.5 - Math.max(Math.abs(move.tr - 3.5), Math.abs(move.tc - 3.5));
   if (piece.t === 'n' || piece.t === 'b') score += centre * 0.08;
@@ -395,7 +438,7 @@ function evaluate(opt, white) {
   return score;
 }
 
-function bestColorFor(side, playedCard) {
+function bestColorFor(side, playedCard, L) {
   const counts = [0, 0, 0, 0];
   S.hands[side].forEach(c => { if (c.id !== playedCard.id && c.color !== null) counts[c.color]++; });
   return counts.indexOf(Math.max(...counts));
@@ -716,6 +759,16 @@ $('#new-game').onclick = () => {
   if (confirm('Online oyundan çıkıp menüye dönülsün mü?')) location.href = location.pathname;
 };
 $('#speed').onchange = e => (botDelay = +e.target.value);
+function showLevel() {
+  document.querySelectorAll('#level [data-level]').forEach(b => {
+    b.classList.toggle('on', b.dataset.level === botLevel);
+    b.setAttribute('aria-checked', b.dataset.level === botLevel);
+  });
+}
+document.querySelectorAll('#level [data-level]').forEach(b => {
+  b.onclick = () => { botLevel = b.dataset.level; localStorage.setItem('sahkart-level', botLevel); showLevel(); };
+});
+showLevel();
 const tcSel = $('#time-ctrl');
 tcSel.value = timeControl;
 if (tcSel.value !== timeControl) tcSel.value = timeControl = '300+3';
