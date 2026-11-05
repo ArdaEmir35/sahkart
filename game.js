@@ -8,7 +8,7 @@ let ME = 0;            // bu tarayıcıdaki oyuncu: 0 = beyaz, 1 = siyah
 let S = null;          // oyun durumu (guest'te host'tan gelen kopya)
 let ui = { card: null, from: null };
 let botDelay = 800, botBusy = false, modalOpen = false, pending = false, rematchAsked = false;
-let lastV = -1, oppOnline = true, claimAt = 0;
+let lastV = -1, oppOnline = true, claimAt = 0, presenceTimer = null;
 let serverMeta = { status: '', rematch: [false, false] };
 let recvAt = 0;        // guest: son durumun geldiği an (saat hesabı için)
 
@@ -756,7 +756,12 @@ function startSession(res) {
   serverMeta = { status: res.status, rematch: res.rematch || [false, false] };
   Online.listen({ id: res.id, token: res.token, chan: res.chan, side: res.side }, {
     onState: onServer,
-    onPresence: on => { oppOnline = on; updateNetStatus(); },
+    onPresence: on => {
+      // Kısa kopmaları (sayfa yükleniyor, ağ değişiyor) uyarı olarak gösterme
+      clearTimeout(presenceTimer);
+      if (on) { oppOnline = true; return updateNetStatus(); }
+      presenceTimer = setTimeout(() => { oppOnline = false; updateNetStatus(); }, 4000);
+    },
     onLive: () => updateNetStatus(),
     waiting: () => serverMeta.status === 'waiting',
   });
