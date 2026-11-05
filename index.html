@@ -4,6 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Şahkart — Kartlı Satranç</title>
+  <meta name="theme-color" content="#12161f">
+  <meta name="description" content="Şahkart: satranç tahtası, renkli kartlar. Bota karşı ya da arkadaşınla online oyna.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Şahkart">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -143,6 +152,8 @@
           <button id="btn-join" class="big alt">Odaya katıl</button>
         </div>
         <p id="lobby-error" class="err"></p>
+        <button id="btn-install" class="ghost install hidden">📲 Uygulamayı yükle</button>
+        <p id="ios-install" class="install-tip hidden">📲 Uygulama gibi kullanmak için: <b>Paylaş</b> → <b>Ana Ekrana Ekle</b></p>
       </div>
 
       <div id="lobby-hosting" class="hidden">

@@ -837,6 +837,27 @@ function showMenu() {
   $('#lobby-error').textContent = '';
 }
 
+// ---------- PWA: çevrimdışı önbellek ve yükleme ----------
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  installPrompt = e;
+  $('#btn-install').classList.remove('hidden');
+});
+$('#btn-install').onclick = async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  $('#btn-install').classList.add('hidden');
+};
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+if (isIOS && !standalone) $('#ios-install').classList.remove('hidden');
+
 // Başlangıç: link ?oda=KOD içeriyorsa direkt katıl, yoksa menüyü göster
 const linkCode = new URLSearchParams(location.search).get('oda');
 if (linkCode) joinRoom(linkCode); else showMenu();

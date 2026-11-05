@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="25%" r="80%">
+      <stop offset="0" stop-color="#2a3446"/>
+      <stop offset="1" stop-color="#10141d"/>
+    </radialGradient>
+    <clipPath id="face"><rect x="150" y="110" width="212" height="300" rx="20"/></clipPath>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g transform="rotate(-9 256 260)">
+    <rect x="138" y="98" width="236" height="324" rx="30" fill="#ffffff"/>
+    <g clip-path="url(#face)">
+      <rect x="150" y="110" width="106" height="150" fill="#e04050"/>
+      <rect x="256" y="110" width="106" height="150" fill="#2f7dd1"/>
+      <rect x="150" y="260" width="106" height="150" fill="#f0b416"/>
+      <rect x="256" y="260" width="106" height="150" fill="#27a35e"/>
+    </g>
+  </g>
+  <g fill="#ffffff" stroke="#10141d" stroke-width="10" stroke-linejoin="round">
+    <path d="M243 104h26v30h28v26h-28v70h-26v-70h-28v-26h28z"/>
+    <path d="M224 244 L200 344 H312 L288 244 Z"/>
+    <rect x="196" y="222" width="120" height="30" rx="12"/>
+    <rect x="182" y="336" width="148" height="40" rx="12"/>
+  </g>
+</svg>
