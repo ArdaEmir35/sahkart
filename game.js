@@ -9,6 +9,14 @@ let S = null;          // oyun durumu (guest'te host'tan gelen kopya)
 let ui = { card: null, from: null };
 let botDelay = 800, botBusy = false, modalOpen = false, pending = false, rematchAsked = false;
 let roomCode = '';
+let recvAt = 0;        // guest: son durumun geldiği an (saat hesabı için)
+
+// Süre ayarı: "saniye+artış" (ör. "300+3"), "0" = süresiz
+let timeControl = localStorage.getItem('sahkart-tc') || '300+3';
+function parseTC(v) {
+  const [base, inc] = String(v).split('+').map(Number);
+  return base > 0 ? { base: base * 1000, inc: (inc || 0) * 1000 } : null;
+}
 
 const $ = s => document.querySelector(s);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -23,7 +31,11 @@ function newGame() {
     board: R.initialBoard(), deck, discard: [], hands: [[], []],
     activeColor: 0, turn: 0, over: false, winner: null, reason: '',
     lastMove: null, drawn: null, log: [],
+    gameId: Math.random().toString(36).slice(2, 8), moveNo: 0, sfx: [], sfxN: 0,
+    clock: null,
   };
+  const tc = parseTC(timeControl);
+  if (tc) S.clock = { ...tc, left: [tc.base, tc.base], running: 0, since: null };
   for (let i = 0; i < HAND_SIZE; i++) { S.hands[0].push(deck.pop()); S.hands[1].push(deck.pop()); }
   const first = S.deck.splice(S.deck.findIndex(c => c.kind === 'piece'), 1)[0];
   S.discard.push(first);
@@ -37,6 +49,31 @@ function newGame() {
 // Log satırlarında {0}/{1}, her oyuncunun ekranında "Sen" / "Rakip" olarak gösterilir
 function log(msg, side = -1, end = false) {
   S.log.push({ m: msg, s: side, end });
+}
+
+// Ses olayları: durumla birlikte gönderilir, iki tarafta da çalınır
+function fx(k) {
+  S.sfx.push({ n: ++S.sfxN, k });
+  if (S.sfx.length > 8) S.sfx.shift();
+}
+
+// ---------- satranç saati ----------
+// Sırası biten tarafın süresinden geçen zamanı düş; hamle yaptıysa artışı ekle
+function clockCharge(addInc) {
+  const k = S.clock;
+  if (!k || k.since == null) return;
+  const now = Date.now();
+  k.left[k.running] = Math.max(0, k.left[k.running] - (now - k.since));
+  if (addInc) k.left[k.running] += k.inc;
+  k.since = now;
+}
+
+function clockLeft(i) {
+  const k = S.clock;
+  let t = k.left[i];
+  if (k.since != null && i === k.running && !S.over)
+    t -= mode === 'guest' ? k.el + (Date.now() - recvAt) : Date.now() - k.since;
+  return Math.max(0, t);
 }
 
 function drawCards(side, n) {
@@ -61,6 +98,12 @@ function optionsFor(side) {
 
 function startTurn() {
   if (S.over) return sync();
+  const k = S.clock;
+  if (k) {
+    if (k.since == null) k.since = Date.now(); // ilk hamle: saat başlar
+    else clockCharge(true);
+    k.running = S.turn;
+  }
   ui = { card: null, from: null };
   S.drawn = null;
   sync();
@@ -78,6 +121,7 @@ function viewFor(side) {
   return {
     ...S,
     deck: S.deck.length,
+    clock: S.clock && { ...S.clock, left: [...S.clock.left], el: S.clock.since == null ? 0 : Date.now() - S.clock.since },
     hands: S.hands.map((h, i) => (i === side ? h : h.map(c => ({ id: c.id })))),
   };
 }
@@ -94,7 +138,10 @@ function play(side, opt, chosenColor) {
   if (move) {
     const piece = S.board[move.fr][move.fc];
     const cap = R.applyMove(S.board, move);
-    S.lastMove = move;
+    S.lastMove = { fr: move.fr, fc: move.fc, tr: move.tr, tc: move.tc, cap: !!cap };
+    S.moveNo++;
+    fx(cap ? 'capture' : 'move');
+    if (move.promo) fx('promo');
     text += ' → ' + R.GLYPH[piece.t] + '︎ ' + R.sqName(move.fr, move.fc) + '–' + R.sqName(move.tr, move.tc);
     if (cap) text += ' <b>(' + R.PIECE_NAMES[cap.t] + ' aldı)</b>';
     if (move.promo) text += ' — piyon vezir oldu!';
@@ -110,9 +157,10 @@ function play(side, opt, chosenColor) {
   } else {
     S.activeColor = card.color;
   }
-  if (card.kind === 'skip') { again = true; text += ' — tekrar oynuyor'; }
-  if (card.kind === 'draw2') { const n = drawCards(opp, 2); text += ' — {' + opp + '} ' + n + ' kart çekti'; }
-  if (R.zoneBonus(card, move)) { const n = drawCards(opp, 1); if (n) text += ' — <i>renk bonusu</i>: {' + opp + '} 1 kart çekti'; }
+  if (!move) fx('card');
+  if (card.kind === 'skip') { again = true; text += ' — tekrar oynuyor'; fx('skip'); }
+  if (card.kind === 'draw2') { const n = drawCards(opp, 2); text += ' — {' + opp + '} ' + n + ' kart çekti'; fx('penalty'); }
+  if (R.zoneBonus(card, move)) { const n = drawCards(opp, 1); if (n) { text += ' — <i>renk bonusu</i>: {' + opp + '} 1 kart çekti'; fx('penalty'); } }
 
   log(text, side);
   if (!hand.length) { log('{' + side + '} elindeki tüm kartları bitirdi!', side, true); return endGame(side, 'Elindeki tüm kartları bitirdi'); }
@@ -126,6 +174,7 @@ function drawCard(side) {
   const hand = S.hands[side];
   const n = drawCards(side, 1);
   if (!n) { log('{' + side + '}: çekecek kart yok.', side); return passTurn(side); }
+  fx('draw');
   const card = hand[hand.length - 1];
   const opts = R.cardOptions(S.board, isWhite(side), card, topCard(), S.activeColor);
   if (!opts.length) {
@@ -147,6 +196,8 @@ function passTurn(side) {
 }
 
 function endGame(winner, reason) {
+  clockCharge(false);
+  if (S.clock) S.clock.since = null;
   S.over = true;
   S.winner = winner;
   S.reason = reason;
@@ -206,6 +257,7 @@ function onHostMessage(m) {
   const turnChanged = !S || S.turn !== m.s.turn || S.over !== m.s.over;
   S = m.s;
   S.deck = new Array(m.s.deck);
+  recvAt = Date.now();
   pending = false;
   if (!S.over) rematchAsked = false;
   if (turnChanged || S.drawn) ui = { card: null, from: null };
@@ -401,18 +453,8 @@ function renderLog() {
   if (S.log.length !== renderedLogLen) { box.scrollTop = box.scrollHeight; renderedLogLen = S.log.length; }
 }
 
-function render() {
-  if (!S) return;
-  const OPP = 1 - ME;
-  const active = canAct();
-  const selOpts = ui.card ? myOptions(ui.card) : [];
-  const fromSet = new Set(selOpts.map(o => o.move && o.move.fr * 8 + o.move.fc));
-  const toSet = new Set(ui.from ? selOpts.filter(o => o.move.fr === ui.from[0] && o.move.fc === ui.from[1]).map(o => o.move.tr * 8 + o.move.tc) : []);
-  const targetZone = ui.card && ui.card.kind === 'piece' ? ui.card.color : null;
-  const flip = ME === 1; // siyah oynayan kendi taşlarını altta görür
-
-  // Tahta
-  const boardEl = $('#board');
+let lastBoardKey = '';
+function drawBoard(boardEl, flip, fromSet, toSet, targetZone) {
   boardEl.innerHTML = '';
   for (let dr = 0; dr < 8; dr++)
     for (let dc = 0; dc < 8; dc++) {
@@ -422,7 +464,7 @@ function render() {
       if (targetZone !== null && R.zone(c) === targetZone) sq.classList.add('target-zone');
       const k = r * 8 + c;
       const lm = S.lastMove;
-      if (lm && ((lm.fr === r && lm.fc === c) || (lm.tr === r && lm.tc === c))) sq.classList.add('last');
+      if (lm && ((lm.fr === r && lm.fc === c) || (lm.tr === r && lm.tc === c))) sq.classList.add('last', lm.tr === r && lm.tc === c ? 'last-to' : 'last-from');
       if (fromSet.has(k)) sq.classList.add('can-from');
       if (ui.from && ui.from[0] === r && ui.from[1] === c) sq.classList.add('sel');
       if (toSet.has(k)) sq.classList.add(S.board[r][c] ? 'can-cap' : 'can-to');
@@ -436,6 +478,101 @@ function render() {
       sq.onclick = () => onSquareClick(r, c);
       boardEl.appendChild(sq);
     }
+}
+
+// Son oynanan taşı eski karesinden yeni karesine kaydır (chess.com tarzı)
+let animatedMove = '';
+function animateLastMove(boardEl, flip) {
+  const key = S.gameId + ':' + S.moveNo;
+  if (!S.lastMove || key === animatedMove) return;
+  const first = !animatedMove.startsWith(S.gameId + ':'); // bağlanınca eski hamleyi oynatma
+  animatedMove = key;
+  if (first && S.moveNo > 1) return;
+  const lm = S.lastMove;
+  const d = (r, c) => (flip ? [7 - r, 7 - c] : [r, c]);
+  const [fr, fc] = d(lm.fr, lm.fc), [tr, tc] = d(lm.tr, lm.tc);
+  const pe = boardEl.children[tr * 8 + tc]?.querySelector('.piece');
+  const size = boardEl.children[0].offsetWidth;
+  if (!pe || !pe.animate) return;
+  pe.style.zIndex = 5;
+  pe.animate(
+    [{ transform: `translate(${(fc - tc) * size}px, ${(fr - tr) * size}px)` }, { transform: 'none' }],
+    { duration: 200, easing: 'cubic-bezier(.3,.7,.4,1)' },
+  ).onfinish = () => (pe.style.zIndex = '');
+}
+
+// Durumdaki yeni ses olaylarını çal
+let soundGame = '', lastSfx = 0, endSounded = '';
+function playNewSounds() {
+  if (soundGame !== S.gameId) {
+    soundGame = S.gameId;
+    lastSfx = S.sfxN; // önceki oyunun / katılmadan önceki sesleri çalma
+    Sound.play('start');
+  }
+  let delay = 0;
+  for (const e of S.sfx) {
+    if (e.n <= lastSfx) continue;
+    Sound.play(e.k, delay);
+    delay += e.k === 'move' || e.k === 'capture' ? 0.12 : 0.08;
+  }
+  lastSfx = S.sfxN;
+  if (S.over && endSounded !== S.gameId) {
+    endSounded = S.gameId;
+    Sound.play(S.winner === ME ? 'win' : 'lose', delay + 0.25);
+  }
+}
+
+// ---------- saat ----------
+function fmtClock(ms) {
+  if (ms < 10000) return (Math.floor(ms / 100) / 10).toFixed(1);
+  const t = Math.ceil(ms / 1000);
+  return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+}
+
+let lastTickSec = -1;
+function updateClocks() {
+  const show = !!(S && S.clock);
+  $('#clock-me').classList.toggle('hidden', !show);
+  $('#clock-opp').classList.toggle('hidden', !show);
+  if (!show) return;
+  const k = S.clock;
+  [[ME, '#clock-me'], [1 - ME, '#clock-opp']].forEach(([side, sel]) => {
+    const ms = clockLeft(side);
+    const el = $(sel);
+    el.textContent = fmtClock(ms);
+    const running = !S.over && k.since != null && k.running === side;
+    el.classList.toggle('on', running);
+    el.classList.toggle('low', ms < 20000);
+    if (side === ME && running && ms < 10000) {
+      const sec = Math.ceil(ms / 1000);
+      if (sec !== lastTickSec) { lastTickSec = sec; Sound.play('tick'); }
+    }
+  });
+  // Süre bitti mi? (oyunu yöneten taraf karar verir)
+  if (mode !== 'guest' && !S.over && k.since != null && clockLeft(k.running) <= 0) {
+    const loser = k.running;
+    log('{' + loser + '} süresi bitti!', 1 - loser, true);
+    endGame(1 - loser, 'Süre bitti');
+  }
+}
+setInterval(updateClocks, 100);
+
+function render() {
+  if (!S) return;
+  const OPP = 1 - ME;
+  const active = canAct();
+  const selOpts = ui.card ? myOptions(ui.card) : [];
+  const fromSet = new Set(selOpts.map(o => o.move && o.move.fr * 8 + o.move.fc));
+  const toSet = new Set(ui.from ? selOpts.filter(o => o.move.fr === ui.from[0] && o.move.fc === ui.from[1]).map(o => o.move.tr * 8 + o.move.tc) : []);
+  const targetZone = ui.card && ui.card.kind === 'piece' ? ui.card.color : null;
+  const flip = ME === 1; // siyah oynayan kendi taşlarını altta görür
+
+  // Tahta (değişmediyse yeniden çizme, yoksa taş animasyonu yarıda kesilir)
+  const boardEl = $('#board');
+  const boardKey = JSON.stringify([S.board, S.lastMove, ui.card && ui.card.id, ui.from, flip, topCard().id, S.activeColor]);
+  if (boardKey !== lastBoardKey) { lastBoardKey = boardKey; drawBoard(boardEl, flip, fromSet, toSet, targetZone); }
+  animateLastMove(boardEl, flip);
+  playNewSounds();
   $('#files').innerHTML = Array.from({ length: 8 }, (_, i) => {
     const c = flip ? 7 - i : i;
     return '<span class="z' + R.zone(c) + '">' + 'abcdefgh'[c] + '</span>';
@@ -493,6 +630,7 @@ function render() {
     $('#again').disabled = rematchAsked;
   }
   renderLog();
+  updateClocks();
 }
 
 // ---------- lobi ----------
@@ -578,6 +716,14 @@ $('#new-game').onclick = () => {
   if (confirm('Online oyundan çıkıp menüye dönülsün mü?')) location.href = location.pathname;
 };
 $('#speed').onchange = e => (botDelay = +e.target.value);
+const tcSel = $('#time-ctrl');
+tcSel.value = timeControl;
+if (tcSel.value !== timeControl) tcSel.value = timeControl = '300+3';
+tcSel.onchange = () => { timeControl = tcSel.value; localStorage.setItem('sahkart-tc', timeControl); };
+const soundBtn = $('#sound-btn');
+const showSound = () => { soundBtn.textContent = Sound.isMuted() ? '🔇' : '🔊'; soundBtn.title = Sound.isMuted() ? 'Sesi aç' : 'Sesi kapat'; };
+soundBtn.onclick = () => { Sound.setMuted(!Sound.isMuted()); showSound(); if (!Sound.isMuted()) Sound.play('move'); };
+showSound();
 $('#rules-btn').onclick = () => $('#rules').classList.toggle('hidden');
 $('#btn-bot').onclick = startBotGame;
 $('#btn-host').onclick = hostRoom;
@@ -595,6 +741,7 @@ document.addEventListener('keydown', e => {
 });
 
 function showMenu() {
+  S = null; // arkadaki oyunu durdur (bot ve saat)
   lobbyView('menu');
   $('#lobby-error').textContent = '';
 }

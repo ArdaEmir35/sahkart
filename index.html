@@ -10,6 +10,7 @@
   <header>
     <h1>♚ Şahkart <small>kartlı satranç</small></h1>
     <div class="header-right">
+      <button id="sound-btn" class="ghost icon" title="Sesi kapat">🔊</button>
       <button id="rules-btn" class="ghost">Kurallar</button>
       <span id="net-status" class="net-status hidden"></span>
       <label id="speed-wrap">Bot hızı
@@ -35,13 +36,17 @@
       <li>Oynanabilir kartın yoksa (ya da istemezsen) desteden 1 kart çekersin. Çektiğin kart oynanabiliyorsa hemen oynayabilirsin, yoksa sıra geçer.</li>
       <li><b>Kazanmak için</b> rakibin şahını al ya da elindeki tüm kartları bitir. Şah çekme kuralı yoktur, şahını korumak sana kalmış!</li>
       <li>Rok ve geçerken alma yok. Son sıraya ulaşan piyon vezir olur.</li>
+      <li><b>Süre</b>: Süreli oyunda sıra sendeyken saatin akar. Her hamleden sonra (varsa) artış süresi eklenir. Süresi biten kaybeder.</li>
     </ul>
   </div>
 
   <main>
     <section class="play">
       <div class="hand-row">
-        <span id="turn-opp" class="turn"><span id="opp-label"></span></span>
+        <div class="who">
+          <span id="turn-opp" class="turn"><span id="opp-label"></span></span>
+          <span id="clock-opp" class="clock hidden"></span>
+        </div>
         <div id="opp-hand" class="hand small"></div>
       </div>
 
@@ -53,7 +58,10 @@
       <div id="status"></div>
 
       <div class="hand-row">
-        <span id="turn-me" class="turn">Sen</span>
+        <div class="who">
+          <span id="turn-me" class="turn">Sen</span>
+          <span id="clock-me" class="clock hidden"></span>
+        </div>
         <div id="my-hand" class="hand"></div>
       </div>
     </section>
@@ -101,6 +109,18 @@
       <p class="sub">Satranç tahtası, renkli kartlar.</p>
 
       <div id="lobby-menu">
+        <label class="tc-row">⏱ Süre
+          <select id="time-ctrl">
+            <option value="0">Süresiz</option>
+            <option value="60+2">1 dk + 2 sn</option>
+            <option value="180+2">3 dk + 2 sn</option>
+            <option value="300+0">5 dk</option>
+            <option value="300+3">5 dk + 3 sn</option>
+            <option value="600+0">10 dk</option>
+            <option value="600+5">10 dk + 5 sn</option>
+            <option value="900+10">15 dk + 10 sn</option>
+          </select>
+        </label>
         <button id="btn-bot" class="big">🤖 Bota karşı oyna</button>
         <div class="sep">Arkadaşınla online</div>
         <button id="btn-host" class="big alt">➕ Oda oluştur</button>
@@ -132,6 +152,7 @@
 
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="net.js"></script>
+  <script src="sound.js"></script>
   <script src="rules.js"></script>
   <script src="game.js"></script>
 </body>

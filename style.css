@@ -42,7 +42,9 @@ aside h2 { margin: 14px 0 6px; font-size: 13px; color: #9fb0c3; text-transform: 
 .sq.z1.target-zone::before { background: color-mix(in srgb, var(--c1) 50%, transparent); }
 .sq.z2.target-zone::before { background: color-mix(in srgb, var(--c2) 50%, transparent); }
 .sq.z3.target-zone::before { background: color-mix(in srgb, var(--c3) 55%, transparent); }
-.sq.last::after { content: ''; position: absolute; inset: 0; background: #ffe76a55; pointer-events: none; }
+.sq.last.light { background: #f5f682; } .sq.last.dark { background: #b9ca43; }
+.sq.last::before { opacity: .3; }
+.sq.last-to::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px #c9a90088; pointer-events: none; }
 .sq.can-from { box-shadow: inset 0 0 0 3px #ffffffcc; }
 .sq.sel { box-shadow: inset 0 0 0 4px #ffd166; }
 .sq.can-to .piece, .sq.can-to::after { pointer-events: none; }
@@ -160,3 +162,15 @@ button.c0 { background: var(--c0); } button.c1 { background: var(--c1); } button
   #my-hand .card .lbl { font-size: 8px; }
   .board-wrap { --sq: calc((100vw - 32px) / 8); }
 }
+
+/* Saat ve ses */
+.who { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+button.ghost.icon { padding: 4px 9px; font-size: 16px; line-height: 1.2; }
+.clock { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 18px; padding: 4px 12px; border-radius: 8px; background: #0d1520; color: #8fa0b4; border: 1px solid #ffffff1a; min-width: 74px; text-align: center; }
+.clock.on { background: #f2f4f7; color: #12161f; box-shadow: 0 0 12px #ffffff44; }
+.clock.low { color: #ff8a8a; }
+.clock.on.low { background: #ffdede; color: #b3121f; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 18px #ff5a5a99; } }
+.tc-row { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 0 0 12px; font-size: 15px; color: #cfe0f2; }
+.tc-row select { font-size: 15px; padding: 6px 8px; }
+@media (max-width: 700px) { .who { flex-direction: row; } .clock { font-size: 15px; min-width: 60px; padding: 3px 8px; } }
