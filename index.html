@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Şahkart — Kartlı Satranç</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>♚ Şahkart <small>kartlı satranç</small></h1>
+    <div class="header-right">
+      <button id="rules-btn" class="ghost">Kurallar</button>
+      <span id="net-status" class="net-status hidden"></span>
+      <label id="speed-wrap">Bot hızı
+        <select id="speed">
+          <option value="1400">Yavaş</option>
+          <option value="800" selected>Normal</option>
+          <option value="300">Hızlı</option>
+        </select>
+      </label>
+      <button id="new-game" class="ghost">Yeni Oyun</button>
+    </div>
+  </header>
+
+  <div id="rules" class="hidden">
+    <h3>Nasıl oynanır?</h3>
+    <ul>
+      <li>Hamle yapmak için kart oynarsın. Kart, ortadaki kartla <b>aynı renkte</b> ya da <b>aynı sembolde</b> olmalı.</li>
+      <li><b>Taş kartı</b>: Kartın gösterdiği taşı oynatırsın.</li>
+      <li><b>Renk bonusu</b>: Taşı kartın <b>rengindeki şeride</b> götürürsen (a–b kırmızı, c–d mavi, e–f yeşil, g–h sarı) rakip 1 kart çeker.</li>
+      <li><b>⏭ Atla</b>: Rakibin sırası atlanır, sen tekrar oynarsın.</li>
+      <li><b>+2</b>: Rakip 2 kart çeker.</li>
+      <li><b>★ Joker</b>: Her zaman oynanabilir. İstediğin taşı istediğin yere oynatır, sonra yeni rengi seçersin.</li>
+      <li>Oynanabilir kartın yoksa (ya da istemezsen) desteden 1 kart çekersin. Çektiğin kart oynanabiliyorsa hemen oynayabilirsin, yoksa sıra geçer.</li>
+      <li><b>Kazanmak için</b> rakibin şahını al ya da elindeki tüm kartları bitir. Şah çekme kuralı yoktur, şahını korumak sana kalmış!</li>
+      <li>Rok ve geçerken alma yok. Son sıraya ulaşan piyon vezir olur.</li>
+    </ul>
+  </div>
+
+  <main>
+    <section class="play">
+      <div class="hand-row">
+        <span id="turn-opp" class="turn"><span id="opp-label"></span></span>
+        <div id="opp-hand" class="hand small"></div>
+      </div>
+
+      <div class="board-wrap">
+        <div id="board"></div>
+        <div id="files" class="files"></div>
+      </div>
+
+      <div id="status"></div>
+
+      <div class="hand-row">
+        <span id="turn-me" class="turn">Sen</span>
+        <div id="my-hand" class="hand"></div>
+      </div>
+    </section>
+
+    <aside>
+      <div class="center">
+        <div class="pile-box">
+          <div class="cap">Ortadaki kart</div>
+          <div id="pile"></div>
+        </div>
+        <div class="pile-box">
+          <div class="cap">Deste (<span id="deck-count"></span>)</div>
+          <button id="draw-btn" class="deck-btn"><div class="card back"></div><span id="draw-label">Kart çek</span></button>
+        </div>
+      </div>
+      <div class="active-row">Geçerli renk: <span id="active-color"></span></div>
+      <h2>Hamle geçmişi</h2>
+      <div id="log"></div>
+    </aside>
+  </main>
+
+  <div id="overlay" class="hidden">
+    <div class="modal">
+      <div id="color-pick" class="hidden">
+        <h3>Yeni rengi seç</h3>
+        <div class="colors">
+          <button data-color="0" class="c0">Kırmızı</button>
+          <button data-color="1" class="c1">Mavi</button>
+          <button data-color="2" class="c2">Yeşil</button>
+          <button data-color="3" class="c3">Sarı</button>
+        </div>
+      </div>
+      <div id="result" class="hidden">
+        <h3 id="overlay-title"></h3>
+        <p id="overlay-text"></p>
+        <button id="again">Tekrar Oyna</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="lobby" class="hidden">
+    <div class="modal lobby">
+      <div class="logo">♚</div>
+      <h2>Şahkart</h2>
+      <p class="sub">Satranç tahtası, renkli kartlar.</p>
+
+      <div id="lobby-menu">
+        <button id="btn-bot" class="big">🤖 Bota karşı oyna</button>
+        <div class="sep">Arkadaşınla online</div>
+        <button id="btn-host" class="big alt">➕ Oda oluştur</button>
+        <div class="join-row">
+          <input id="join-code" maxlength="4" placeholder="KOD" autocomplete="off">
+          <button id="btn-join" class="big alt">Odaya katıl</button>
+        </div>
+        <p id="lobby-error" class="err"></p>
+      </div>
+
+      <div id="lobby-hosting" class="hidden">
+        <p>Oda kodun:</p>
+        <div id="room-code" class="room-code">····</div>
+        <p class="sub">Bu kodu arkadaşına gönder ya da linki paylaş.</p>
+        <div class="join-row">
+          <input id="room-link" readonly>
+          <button id="copy-link" class="alt">Linki kopyala</button>
+        </div>
+        <p class="wait"><span class="spinner"></span> Arkadaşın bekleniyor…</p>
+        <button id="cancel-host" class="ghost">İptal</button>
+      </div>
+
+      <div id="lobby-joining" class="hidden">
+        <p><span class="spinner"></span> <b id="joining-code"></b> odasına bağlanılıyor…</p>
+        <button id="cancel-join" class="ghost">İptal</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="net.js"></script>
+  <script src="rules.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

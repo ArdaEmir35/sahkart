@@ -1,0 +1,604 @@
+// Şahkart: oyun akışı, arayüz, bot ve online mod
+const R = Rules;
+const HAND_SIZE = 7;
+
+// mode: 'bot' (bota karşı), 'host' (odayı açan, oyunu yöneten), 'guest' (odaya katılan)
+let mode = 'bot';
+let ME = 0;            // bu tarayıcıdaki oyuncu: 0 = beyaz, 1 = siyah
+let S = null;          // oyun durumu (guest'te host'tan gelen kopya)
+let ui = { card: null, from: null };
+let botDelay = 800, botBusy = false, modalOpen = false, pending = false, rematchAsked = false;
+let roomCode = '';
+
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const isWhite = side => side === 0;
+const nameOf = side => (side === ME ? 'Sen' : mode === 'bot' ? 'Bot' : 'Rakip');
+const topCard = () => S.discard[S.discard.length - 1];
+
+// ---------- oyun mantığı (sadece bot modunda ve host'ta çalışır) ----------
+function newGame() {
+  const deck = R.buildDeck();
+  S = {
+    board: R.initialBoard(), deck, discard: [], hands: [[], []],
+    activeColor: 0, turn: 0, over: false, winner: null, reason: '',
+    lastMove: null, drawn: null, log: [],
+  };
+  for (let i = 0; i < HAND_SIZE; i++) { S.hands[0].push(deck.pop()); S.hands[1].push(deck.pop()); }
+  const first = S.deck.splice(S.deck.findIndex(c => c.kind === 'piece'), 1)[0];
+  S.discard.push(first);
+  S.activeColor = first.color;
+  rematchAsked = false;
+  botBusy = false;
+  log('Oyun başladı. İlk kart: ' + cardTag(first));
+  startTurn();
+}
+
+// Log satırlarında {0}/{1}, her oyuncunun ekranında "Sen" / "Rakip" olarak gösterilir
+function log(msg, side = -1, end = false) {
+  S.log.push({ m: msg, s: side, end });
+}
+
+function drawCards(side, n) {
+  let drawn = 0;
+  for (let i = 0; i < n; i++) {
+    if (!S.deck.length) {
+      if (S.discard.length <= 1) break;
+      const keep = S.discard.pop();
+      S.deck = R.shuffle(S.discard);
+      S.discard = [keep];
+      log('Deste bitti, atılan kartlar karıştırıldı.');
+    }
+    S.hands[side].push(S.deck.pop());
+    drawn++;
+  }
+  return drawn;
+}
+
+function optionsFor(side) {
+  return R.allOptions(S.board, isWhite(side), S.hands[side], topCard(), S.activeColor);
+}
+
+function startTurn() {
+  if (S.over) return sync();
+  ui = { card: null, from: null };
+  S.drawn = null;
+  sync();
+  if (mode === 'bot' && S.turn === 1) botTurn();
+}
+
+// Durumu ekrana çiz, host isek rakibe gönder
+function sync() {
+  render();
+  if (mode === 'host') Net.send({ a: 'state', s: viewFor(1) });
+}
+
+// Rakibin elini gizleyerek durumun bir kopyasını hazırla
+function viewFor(side) {
+  return {
+    ...S,
+    deck: S.deck.length,
+    hands: S.hands.map((h, i) => (i === side ? h : h.map(c => ({ id: c.id })))),
+  };
+}
+
+function play(side, opt, chosenColor) {
+  const { card, move } = opt;
+  const hand = S.hands[side];
+  hand.splice(hand.findIndex(c => c.id === card.id), 1);
+  S.discard.push(card);
+  const opp = 1 - side;
+  let again = false;
+  let text = '{' + side + '}: ' + cardTag(card);
+
+  if (move) {
+    const piece = S.board[move.fr][move.fc];
+    const cap = R.applyMove(S.board, move);
+    S.lastMove = move;
+    text += ' → ' + R.GLYPH[piece.t] + '︎ ' + R.sqName(move.fr, move.fc) + '–' + R.sqName(move.tr, move.tc);
+    if (cap) text += ' <b>(' + R.PIECE_NAMES[cap.t] + ' aldı)</b>';
+    if (move.promo) text += ' — piyon vezir oldu!';
+    if (cap && cap.t === 'k') {
+      log(text, side, true);
+      return endGame(side, 'Şah alındı');
+    }
+  }
+
+  if (card.kind === 'wild') {
+    S.activeColor = chosenColor;
+    text += ' · yeni renk: <span class="dot c' + chosenColor + '"></span>' + R.COLOR_NAMES[chosenColor];
+  } else {
+    S.activeColor = card.color;
+  }
+  if (card.kind === 'skip') { again = true; text += ' — tekrar oynuyor'; }
+  if (card.kind === 'draw2') { const n = drawCards(opp, 2); text += ' — {' + opp + '} ' + n + ' kart çekti'; }
+  if (R.zoneBonus(card, move)) { const n = drawCards(opp, 1); if (n) text += ' — <i>renk bonusu</i>: {' + opp + '} 1 kart çekti'; }
+
+  log(text, side);
+  if (!hand.length) { log('{' + side + '} elindeki tüm kartları bitirdi!', side, true); return endGame(side, 'Elindeki tüm kartları bitirdi'); }
+
+  S.turn = again ? side : opp;
+  startTurn();
+}
+
+// Desteden 1 kart çeker. Çekilen kart oynanabiliyorsa hemen oynanabilir, yoksa sıra geçer.
+function drawCard(side) {
+  const hand = S.hands[side];
+  const n = drawCards(side, 1);
+  if (!n) { log('{' + side + '}: çekecek kart yok.', side); return passTurn(side); }
+  const card = hand[hand.length - 1];
+  const opts = R.cardOptions(S.board, isWhite(side), card, topCard(), S.activeColor);
+  if (!opts.length) {
+    log('{' + side + '} kart çekti ve sırasını geçti.', side);
+    S.turn = 1 - side;
+    return startTurn();
+  }
+  log('{' + side + '} kart çekti.', side);
+  S.drawn = card.id;
+  if (mode === 'bot' && side === 1) return botAfterDraw(opts);
+  ui = { card: null, from: null };
+  sync();
+}
+
+function passTurn(side) {
+  if (S.drawn) log('{' + side + '} sırasını geçti.', side);
+  S.turn = 1 - side;
+  startTurn();
+}
+
+function endGame(winner, reason) {
+  S.over = true;
+  S.winner = winner;
+  S.reason = reason;
+  sync();
+}
+
+// ---------- oyuncu eylemleri (guest'te host'a gönderilir) ----------
+function canAct() {
+  return S && !S.over && S.turn === ME && !botBusy && !modalOpen && !pending;
+}
+
+function doPlay(opt, color) {
+  if (mode === 'guest') {
+    pending = true;
+    const m = opt.move;
+    Net.send({ a: 'play', cardId: opt.card.id, move: m && { fr: m.fr, fc: m.fc, tr: m.tr, tc: m.tc }, color });
+    ui = { card: null, from: null };
+    return render();
+  }
+  play(ME, opt, color);
+}
+
+function doDrawOrPass() {
+  if (!canAct()) return;
+  if (mode === 'guest') { pending = true; Net.send({ a: S.drawn ? 'pass' : 'draw' }); return render(); }
+  if (S.drawn) passTurn(ME); else drawCard(ME);
+}
+
+function doRematch() {
+  if (mode === 'guest') { rematchAsked = true; Net.send({ a: 'rematch' }); return render(); }
+  newGame();
+}
+
+// Host: misafirden gelen mesajları doğrula ve uygula
+function onGuestMessage(m) {
+  if (!m || !S) return;
+  if (m.a === 'rematch') { if (S.over) newGame(); return; }
+  if (S.over || S.turn !== 1) return sync();
+  if (m.a === 'draw' && !S.drawn) return drawCard(1);
+  if (m.a === 'pass' && S.drawn) return passTurn(1);
+  if (m.a === 'play') {
+    const card = S.hands[1].find(c => c.id === m.cardId);
+    if (!card || (S.drawn && card.id !== S.drawn)) return sync();
+    const opt = R.cardOptions(S.board, false, card, topCard(), S.activeColor).find(o =>
+      !m.move ? !o.move : o.move && o.move.fr === m.move.fr && o.move.fc === m.move.fc && o.move.tr === m.move.tr && o.move.tc === m.move.tc);
+    if (!opt) return sync();
+    if (card.kind === 'wild' && !(m.color >= 0 && m.color < 4)) return sync();
+    return play(1, opt, m.color);
+  }
+  sync();
+}
+
+// Guest: host'tan gelen durum
+function onHostMessage(m) {
+  if (m.a === 'full') { Net.close(); return lobbyError('Bu oda dolu.'); }
+  if (m.a !== 'state') return;
+  const turnChanged = !S || S.turn !== m.s.turn || S.over !== m.s.over;
+  S = m.s;
+  S.deck = new Array(m.s.deck);
+  pending = false;
+  if (!S.over) rematchAsked = false;
+  if (turnChanged || S.drawn) ui = { card: null, from: null };
+  render();
+}
+
+// ---------- insan arayüzü ----------
+function myOptions(card) {
+  return R.cardOptions(S.board, isWhite(ME), card, topCard(), S.activeColor);
+}
+
+function onCardClick(card) {
+  if (!canAct()) return;
+  if (S.drawn && card.id !== S.drawn) return flash('Sadece çektiğin kartı oynayabilir ya da pas geçebilirsin.');
+  const opts = myOptions(card);
+  if (!opts.length) return flash(R.matches(card, topCard(), S.activeColor)
+    ? 'Bu kartla yapılabilecek bir hamle yok.'
+    : 'Bu kart eşleşmiyor: renk veya sembol aynı olmalı.');
+  if (ui.card && ui.card.id === card.id) { ui = { card: null, from: null }; return render(); }
+  if (card.kind === 'skip' || card.kind === 'draw2') return doPlay(opts[0]);
+  ui = { card, from: null };
+  render();
+}
+
+function onSquareClick(r, c) {
+  if (!canAct() || !ui.card) return;
+  const opts = myOptions(ui.card);
+  if (ui.from) {
+    const opt = opts.find(o => o.move.fr === ui.from[0] && o.move.fc === ui.from[1] && o.move.tr === r && o.move.tc === c);
+    if (opt) {
+      if (ui.card.kind === 'wild') return askColor(color => doPlay(opt, color));
+      return doPlay(opt);
+    }
+  }
+  ui.from = opts.some(o => o.move.fr === r && o.move.fc === c) ? [r, c] : null;
+  render();
+}
+
+function askColor(cb) {
+  modalOpen = true;
+  render();
+  document.querySelectorAll('#color-pick [data-color]').forEach(btn => {
+    btn.onclick = () => { modalOpen = false; cb(+btn.dataset.color); render(); };
+  });
+}
+
+// ---------- bot (siyah, side 1) ----------
+async function botTurn() {
+  const game = S;
+  botBusy = true;
+  render();
+  await sleep(botDelay);
+  if (S !== game) return; // bu arada yeni oyun başladı
+  botBusy = false;
+  if (S.over || mode !== 'bot') return;
+  const best = pickBest(optionsFor(1));
+  if (!best) return drawCard(1);
+  playBot(best);
+}
+
+async function botAfterDraw(opts) {
+  const game = S;
+  botBusy = true;
+  render();
+  await sleep(botDelay * 0.6);
+  if (S !== game) return;
+  botBusy = false;
+  if (S.over || mode !== 'bot') return;
+  const best = pickBest(opts);
+  if (best) playBot(best); else passTurn(1);
+}
+
+// En iyi seçeneği seç; hepsi kötüyse (eşik altı) null döner ve bot kart çeker
+function pickBest(opts) {
+  let best = null, bestScore = -1.2;
+  for (const o of opts) {
+    const s = evaluate(o, false);
+    if (s > bestScore) { bestScore = s; best = o; }
+  }
+  return best;
+}
+
+function playBot(opt) {
+  const color = opt.card.kind === 'wild' ? bestColorFor(1, opt.card) : undefined;
+  play(1, opt, color);
+}
+
+// Bir seçeneği 'white' tarafı açısından puanlar
+function evaluate(opt, white) {
+  const { card, move } = opt;
+  let score = Math.random() * 0.35;
+  if (card.kind === 'skip') score += 1.3;
+  if (card.kind === 'draw2') score += 1.1;
+  if (card.kind === 'wild') score -= 1.5; // jokeri boşa harcama
+  if (!move) return score;
+  if (R.zoneBonus(card, move)) score += 0.7;
+
+  const b = S.board;
+  const piece = b[move.fr][move.fc];
+  const cap = b[move.tr][move.tc];
+  if (cap && cap.t === 'k') return 10000;
+  const V = R.VALUE;
+
+  const before = R.minAttacker(b, move.fr, move.fc, !white);
+  const b2 = R.cloneBoard(b);
+  R.applyMove(b2, { ...move });
+  const moved = b2[move.tr][move.tc];
+
+  if (cap) score += V[cap.t];
+  if (moved.t !== piece.t) score += 8; // terfi
+
+  // Taşın gittiği kare tehlikede mi? (rakibin uygun kartı olmayabilir, o yüzden 0.75)
+  const att = R.minAttacker(b2, move.tr, move.tc, !white);
+  if (att) {
+    const defended = R.minAttacker(b2, move.tr, move.tc, white);
+    const pv = Math.min(V[moved.t], 20);
+    score -= (defended ? Math.max(0, pv - att) : pv) * 0.75;
+  }
+  if (before && !att) score += Math.min(V[piece.t], 20) * 0.5; // tehditten kaçış
+
+  // Şah güvenliği: sadece durumdaki değişimi puanla
+  const kingNow = R.findKing(b, white);
+  const dangerNow = kingNow && R.minAttacker(b, kingNow[0], kingNow[1], !white);
+  const myKing = R.findKing(b2, white);
+  const dangerAfter = myKing && R.minAttacker(b2, myKing[0], myKing[1], !white);
+  if (dangerAfter && !dangerNow) score -= 25;
+  if (dangerNow && !dangerAfter) score += 25;
+  const oppKing = R.findKing(b2, !white);
+  if (oppKing && R.minAttacker(b2, oppKing[0], oppKing[1], white)) score += 2;
+
+  const centre = 3.5 - Math.max(Math.abs(move.tr - 3.5), Math.abs(move.tc - 3.5));
+  if (piece.t === 'n' || piece.t === 'b') score += centre * 0.08;
+  if (piece.t === 'p') score += 0.1;
+  if (piece.t === 'k' && !att) score -= 0.3;
+  return score;
+}
+
+function bestColorFor(side, playedCard) {
+  const counts = [0, 0, 0, 0];
+  S.hands[side].forEach(c => { if (c.id !== playedCard.id && c.color !== null) counts[c.color]++; });
+  return counts.indexOf(Math.max(...counts));
+}
+
+// ---------- çizim ----------
+let flashTimer;
+function flash(msg) {
+  const el = $('#status');
+  el.textContent = msg;
+  el.classList.add('warn');
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { el.classList.remove('warn'); render(); }, 1600);
+}
+
+function cardSymbol(card) {
+  if (card.kind === 'piece') return R.GLYPH[card.piece] + '︎';
+  if (card.kind === 'skip') return '⏭︎';
+  if (card.kind === 'draw2') return '+2';
+  return '★';
+}
+function cardTag(card) {
+  return '<span class="tag ' + (card.kind === 'wild' ? 'wild' : 'c' + card.color) + '">' + cardSymbol(card) + '</span>';
+}
+
+const seenCards = new Set(); // sadece yeni görünen kartlar animasyon alsın
+function cardEl(card, opts = {}) {
+  const d = document.createElement('div');
+  const key = (opts.back ? 'b' : opts.pile ? 'p' : 'f') + card.id;
+  const isNew = !seenCards.has(key);
+  seenCards.add(key);
+  if (opts.back) { d.className = 'card back' + (isNew ? ' new' : ''); return d; }
+  d.className = 'card ' + (card.kind === 'wild' ? 'wild' : 'c' + card.color);
+  if (isNew) d.classList.add('new');
+  if (opts.playable) d.classList.add('playable');
+  if (opts.dim) d.classList.add('dim');
+  if (opts.selected) d.classList.add('selected');
+  const label = card.kind === 'piece' ? R.PIECE_NAMES[card.piece] : card.kind === 'skip' ? 'Atla' : card.kind === 'draw2' ? 'Çek 2' : 'Joker';
+  d.innerHTML = '<span class="corner">' + cardSymbol(card) + '</span><span class="sym">' + cardSymbol(card) + '</span><span class="lbl">' + label + '</span>';
+  d.title = R.cardLabel(card);
+  return d;
+}
+
+let renderedLogLen = 0;
+function renderLog() {
+  const box = $('#log');
+  box.innerHTML = '';
+  S.log.forEach(e => {
+    const el = document.createElement('div');
+    const cls = e.s < 0 ? 'sys' : e.end ? (S.winner === ME ? 'win' : 'lose') : e.s === ME ? 'me' : 'bot';
+    el.className = 'log-line ' + cls;
+    el.innerHTML = e.m.replace(/\{([01])\}/g, (_, d) => nameOf(+d));
+    box.appendChild(el);
+  });
+  if (S.log.length !== renderedLogLen) { box.scrollTop = box.scrollHeight; renderedLogLen = S.log.length; }
+}
+
+function render() {
+  if (!S) return;
+  const OPP = 1 - ME;
+  const active = canAct();
+  const selOpts = ui.card ? myOptions(ui.card) : [];
+  const fromSet = new Set(selOpts.map(o => o.move && o.move.fr * 8 + o.move.fc));
+  const toSet = new Set(ui.from ? selOpts.filter(o => o.move.fr === ui.from[0] && o.move.fc === ui.from[1]).map(o => o.move.tr * 8 + o.move.tc) : []);
+  const targetZone = ui.card && ui.card.kind === 'piece' ? ui.card.color : null;
+  const flip = ME === 1; // siyah oynayan kendi taşlarını altta görür
+
+  // Tahta
+  const boardEl = $('#board');
+  boardEl.innerHTML = '';
+  for (let dr = 0; dr < 8; dr++)
+    for (let dc = 0; dc < 8; dc++) {
+      const r = flip ? 7 - dr : dr, c = flip ? 7 - dc : dc;
+      const sq = document.createElement('div');
+      sq.className = 'sq z' + R.zone(c) + ((r + c) % 2 ? ' dark' : ' light');
+      if (targetZone !== null && R.zone(c) === targetZone) sq.classList.add('target-zone');
+      const k = r * 8 + c;
+      const lm = S.lastMove;
+      if (lm && ((lm.fr === r && lm.fc === c) || (lm.tr === r && lm.tc === c))) sq.classList.add('last');
+      if (fromSet.has(k)) sq.classList.add('can-from');
+      if (ui.from && ui.from[0] === r && ui.from[1] === c) sq.classList.add('sel');
+      if (toSet.has(k)) sq.classList.add(S.board[r][c] ? 'can-cap' : 'can-to');
+      const p = S.board[r][c];
+      if (p) {
+        const pe = document.createElement('span');
+        pe.className = 'piece ' + (p.w ? 'white' : 'black');
+        pe.textContent = R.GLYPH[p.t] + '︎';
+        sq.appendChild(pe);
+      }
+      sq.onclick = () => onSquareClick(r, c);
+      boardEl.appendChild(sq);
+    }
+  $('#files').innerHTML = Array.from({ length: 8 }, (_, i) => {
+    const c = flip ? 7 - i : i;
+    return '<span class="z' + R.zone(c) + '">' + 'abcdefgh'[c] + '</span>';
+  }).join('');
+
+  // Eller
+  const oppHand = $('#opp-hand');
+  oppHand.innerHTML = '';
+  S.hands[OPP].forEach(c => oppHand.appendChild(cardEl(c, { back: true })));
+  $('#opp-label').textContent = nameOf(OPP) + ' · ' + S.hands[OPP].length + ' kart';
+
+  const myHand = $('#my-hand');
+  myHand.innerHTML = '';
+  const sorted = [...S.hands[ME]].sort((a, b) => (a.color ?? 9) - (b.color ?? 9) || R.sym(a).localeCompare(R.sym(b)));
+  sorted.forEach(card => {
+    const playable = active && (!S.drawn || card.id === S.drawn) && myOptions(card).length > 0;
+    const el = cardEl(card, { playable, dim: active && !playable, selected: ui.card && ui.card.id === card.id });
+    el.onclick = () => onCardClick(card);
+    myHand.appendChild(el);
+  });
+
+  // Orta alan
+  const pile = $('#pile');
+  pile.innerHTML = '';
+  pile.appendChild(cardEl(topCard(), { pile: true }));
+  $('#deck-count').textContent = S.deck.length;
+  const ac = $('#active-color');
+  ac.className = 'active-color c' + S.activeColor;
+  ac.textContent = R.COLOR_NAMES[S.activeColor];
+  $('#draw-btn').disabled = !active;
+  $('#draw-label').textContent = S.turn === ME && S.drawn ? 'Pas geç' : 'Kart çek';
+
+  // Durum
+  const st = $('#status');
+  if (!st.classList.contains('warn')) {
+    if (S.over) st.textContent = S.winner === ME ? 'Kazandın!' : nameOf(S.winner) + ' kazandı.';
+    else if (S.turn !== ME) st.textContent = mode === 'bot' ? 'Bot düşünüyor…' : 'Rakibin sırası…';
+    else if (pending) st.textContent = 'Gönderiliyor…';
+    else if (!ui.card && S.drawn) st.textContent = 'Çektiğin kartı oynayabilir ya da pas geçebilirsin.';
+    else if (!ui.card) st.textContent = optionsFor(ME).length ? 'Sıra sende: parlayan bir kart seç.' : 'Oynanabilir kartın yok: desteden çek.';
+    else if (!ui.from) st.textContent = ui.card.kind === 'wild' ? 'Joker: istediğin taşı seç.' : R.PIECE_NAMES[ui.card.piece] + ' seç. ' + R.COLOR_NAMES[ui.card.color] + ' şeride gidersen rakip 1 kart çeker.';
+    else st.textContent = 'Hedef kareyi seç.';
+  }
+  $('#turn-me').classList.toggle('on', S.turn === ME && !S.over);
+  $('#turn-opp').classList.toggle('on', S.turn === OPP && !S.over);
+
+  // Pencereler: renk seçimi / oyun sonu
+  $('#overlay').classList.toggle('hidden', !modalOpen && !S.over);
+  $('#color-pick').classList.toggle('hidden', !modalOpen);
+  $('#result').classList.toggle('hidden', !S.over || modalOpen);
+  if (S.over) {
+    $('#overlay-title').textContent = S.winner === ME ? 'Kazandın! 🏆' : 'Kaybettin';
+    $('#overlay-text').textContent = S.reason + '.';
+    $('#again').textContent = rematchAsked ? 'Rakip bekleniyor…' : 'Tekrar Oyna';
+    $('#again').disabled = rematchAsked;
+  }
+  renderLog();
+}
+
+// ---------- lobi ----------
+function lobbyView(v) {
+  $('#lobby').classList.remove('hidden');
+  ['menu', 'hosting', 'joining'].forEach(x => $('#lobby-' + x).classList.toggle('hidden', x !== v));
+}
+function hideLobby() { $('#lobby').classList.add('hidden'); }
+function lobbyError(msg) {
+  mode = 'bot'; ME = 0;
+  lobbyView('menu');
+  $('#lobby-error').textContent = msg;
+}
+function setNetStatus(text, ok) {
+  const el = $('#net-status');
+  el.textContent = text;
+  el.className = 'net-status ' + (ok ? 'ok' : 'bad');
+  el.classList.toggle('hidden', !text);
+  $('#speed-wrap').classList.toggle('hidden', mode !== 'bot');
+}
+
+function startBotGame() {
+  mode = 'bot'; ME = 0;
+  hideLobby();
+  setNetStatus('');
+  newGame();
+}
+
+function hostRoom() {
+  if (!Net.available()) return lobbyError('Online mod yüklenemedi. İnternet bağlantını kontrol et.');
+  mode = 'host'; ME = 0;
+  lobbyView('hosting');
+  $('#room-code').textContent = '····';
+  $('#room-link').value = '';
+  Net.host({
+    onCode: code => {
+      roomCode = code;
+      $('#room-code').textContent = code;
+      $('#room-link').value = location.origin + location.pathname + '?oda=' + code;
+    },
+    onConnect: () => {
+      hideLobby();
+      setNetStatus('● Bağlı · Oda ' + roomCode, true);
+      newGame();
+    },
+    onMessage: onGuestMessage,
+    onClose: () => setNetStatus('● Rakibin bağlantısı koptu', false),
+    onError: e => lobbyError('Bağlantı hatası: ' + (e.type || e.message || e)),
+  });
+}
+
+let joinTimer;
+function joinRoom(code) {
+  code = (code || '').trim().toUpperCase();
+  if (!/^[A-Z]{4}$/.test(code)) return lobbyError('4 harfli oda kodunu gir.');
+  if (!Net.available()) return lobbyError('Online mod yüklenemedi. İnternet bağlantını kontrol et.');
+  mode = 'guest'; ME = 1; roomCode = code;
+  lobbyView('joining');
+  $('#joining-code').textContent = code;
+  clearTimeout(joinTimer);
+  joinTimer = setTimeout(() => { if (!S) { Net.close(); lobbyError('Odaya bağlanılamadı. Kodu kontrol et.'); } }, 15000);
+  Net.join(code, {
+    onConnect: () => {
+      clearTimeout(joinTimer);
+      hideLobby();
+      setNetStatus('● Bağlı · Oda ' + code, true);
+    },
+    onMessage: onHostMessage,
+    onClose: () => setNetStatus('● Ev sahibinin bağlantısı koptu', false),
+    onError: e => {
+      clearTimeout(joinTimer);
+      Net.close();
+      lobbyError(e.type === 'peer-unavailable' ? 'Bu kodla açık bir oda bulunamadı.' : 'Bağlantı hatası: ' + (e.type || e.message || e));
+    },
+  });
+}
+
+// ---------- olaylar ----------
+$('#draw-btn').onclick = doDrawOrPass;
+$('#again').onclick = doRematch;
+$('#new-game').onclick = () => {
+  if (mode === 'bot') return S && !S.over && S.log.length > 2 && !confirm('Yeni oyuna başlansın mı?') ? null : showMenu();
+  if (confirm('Online oyundan çıkıp menüye dönülsün mü?')) location.href = location.pathname;
+};
+$('#speed').onchange = e => (botDelay = +e.target.value);
+$('#rules-btn').onclick = () => $('#rules').classList.toggle('hidden');
+$('#btn-bot').onclick = startBotGame;
+$('#btn-host').onclick = hostRoom;
+$('#btn-join').onclick = () => joinRoom($('#join-code').value);
+$('#join-code').onkeydown = e => { if (e.key === 'Enter') joinRoom(e.target.value); };
+$('#cancel-host').onclick = $('#cancel-join').onclick = () => { Net.close(); lobbyError(''); };
+$('#copy-link').onclick = () => {
+  navigator.clipboard.writeText($('#room-link').value).then(() => {
+    $('#copy-link').textContent = 'Kopyalandı ✓';
+    setTimeout(() => ($('#copy-link').textContent = 'Linki kopyala'), 1500);
+  });
+};
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && ui.card && !modalOpen) { ui = { card: null, from: null }; render(); }
+});
+
+function showMenu() {
+  lobbyView('menu');
+  $('#lobby-error').textContent = '';
+}
+
+// Başlangıç: link ?oda=KOD içeriyorsa direkt katıl, yoksa menüyü göster
+const linkCode = new URLSearchParams(location.search).get('oda');
+if (linkCode) joinRoom(linkCode); else showMenu();
