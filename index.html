@@ -29,6 +29,7 @@
           <option value="300">Hızlı</option>
         </select>
       </label>
+      <button id="resign-btn" class="ghost danger hidden">🏳 Pes et</button>
       <button id="new-game" class="ghost">Yeni Oyun</button>
     </div>
   </header>
@@ -138,6 +139,7 @@
             <option value="900+10">15 dk + 10 sn</option>
           </select>
         </label>
+        <button id="btn-resume" class="big resume hidden">↩︎ Devam eden oyuna dön</button>
         <button id="btn-tutorial" class="big tut">🎓 Nasıl oynanır? <small>2 dakikalık eğitim</small></button>
         <button id="btn-bot" class="big">🤖 Bota karşı oyna</button>
         <div id="level" class="level-row" role="radiogroup" aria-label="Bot seviyesi">
@@ -146,7 +148,8 @@
           <button data-level="hard">Zor</button>
         </div>
         <div class="sep">Arkadaşınla online</div>
-        <button id="btn-host" class="big alt">➕ Oda oluştur</button>
+        <button id="btn-quick" class="big quick">⚡ Hızlı eşleş</button>
+        <button id="btn-host" class="big alt">➕ Arkadaşınla oyna (oda oluştur)</button>
         <div class="join-row">
           <input id="join-code" maxlength="4" placeholder="KOD" autocomplete="off">
           <button id="btn-join" class="big alt">Odaya katıl</button>
@@ -168,15 +171,21 @@
         <button id="cancel-host" class="ghost">İptal</button>
       </div>
 
+      <div id="lobby-searching" class="hidden">
+        <p class="wait"><span class="spinner"></span> Rakip aranıyor… <span class="sub">(<span id="search-tc"></span>)</span></p>
+        <p class="sub">Aynı süre ayarını seçen ilk oyuncuyla eşleşeceksin. Oyun yeni olduğu için bekleme uzun sürebilir; arkadaşına da "Hızlı eşleş"e basmasını söyleyebilirsin.</p>
+        <button id="cancel-search" class="ghost">İptal</button>
+      </div>
+
       <div id="lobby-joining" class="hidden">
-        <p><span class="spinner"></span> <b id="joining-code"></b> odasına bağlanılıyor…</p>
+        <p><span class="spinner"></span> <span id="joining-msg"></span></p>
         <button id="cancel-join" class="ghost">İptal</button>
       </div>
     </div>
   </div>
 
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="net.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"></script>
+  <script src="online.js"></script>
   <script src="sound.js"></script>
   <script src="rules.js"></script>
   <script src="tutorial.js"></script>

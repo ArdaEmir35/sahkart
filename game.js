@@ -2,13 +2,14 @@
 const R = Rules;
 const HAND_SIZE = 7;
 
-// mode: 'bot' (bota karşı), 'host' (odayı açan, oyunu yöneten), 'guest' (odaya katılan)
+// mode: 'bot' (bota karşı), 'tutorial' (eğitim), 'online' (sunucu üzerinden arkadaşla / hızlı eşleşme)
 let mode = 'bot';
 let ME = 0;            // bu tarayıcıdaki oyuncu: 0 = beyaz, 1 = siyah
 let S = null;          // oyun durumu (guest'te host'tan gelen kopya)
 let ui = { card: null, from: null };
 let botDelay = 800, botBusy = false, modalOpen = false, pending = false, rematchAsked = false;
-let roomCode = '';
+let lastV = -1, oppOnline = true, claimAt = 0;
+let serverMeta = { status: '', rematch: [false, false] };
 let recvAt = 0;        // guest: son durumun geldiği an (saat hesabı için)
 
 // Süre ayarı: "saniye+artış" (ör. "300+3"), "0" = süresiz
@@ -72,7 +73,7 @@ function clockLeft(i) {
   const k = S.clock;
   let t = k.left[i];
   if (k.since != null && i === k.running && !S.over)
-    t -= mode === 'guest' ? k.el + (Date.now() - recvAt) : Date.now() - k.since;
+    t -= mode === 'online' ? k.el + (Date.now() - recvAt) : Date.now() - k.since;
   return Math.max(0, t);
 }
 
@@ -110,10 +111,8 @@ function startTurn() {
   if (mode === 'bot' && S.turn === 1) botTurn();
 }
 
-// Durumu ekrana çiz, host isek rakibe gönder
 function sync() {
   render();
-  if (mode === 'host') Net.send({ a: 'state', s: viewFor(1) });
 }
 
 // Rakibin elini gizleyerek durumun bir kopyasını hazırla
@@ -217,12 +216,9 @@ function doPlay(opt, color) {
     play(ME, opt, color);
     return Tutorial.advance();
   }
-  if (mode === 'guest') {
-    pending = true;
+  if (mode === 'online') {
     const m = opt.move;
-    Net.send({ a: 'play', cardId: opt.card.id, move: m && { fr: m.fr, fc: m.fc, tr: m.tr, tc: m.tc }, color });
-    ui = { card: null, from: null };
-    return render();
+    return sendAction({ action: 'play', cardId: opt.card.id, move: m && { fr: m.fr, fc: m.fc, tr: m.tr, tc: m.tc }, color });
   }
   play(ME, opt, color);
 }
@@ -236,46 +232,52 @@ function doDrawOrPass() {
     if (type === 'pass') passTurn(ME); else drawCard(ME);
     return Tutorial.advance();
   }
-  if (mode === 'guest') { pending = true; Net.send({ a: S.drawn ? 'pass' : 'draw' }); return render(); }
+  if (mode === 'online') return sendAction({ action: S.drawn ? 'pass' : 'draw' });
   if (S.drawn) passTurn(ME); else drawCard(ME);
 }
 
 function doRematch() {
-  if (mode === 'guest') { rematchAsked = true; Net.send({ a: 'rematch' }); return render(); }
+  if (mode === 'online') return sendAction({ action: 'rematch' });
   newGame();
 }
 
-// Host: misafirden gelen mesajları doğrula ve uygula
-function onGuestMessage(m) {
-  if (!m || !S) return;
-  if (m.a === 'rematch') { if (S.over) newGame(); return; }
-  if (S.over || S.turn !== 1) return sync();
-  if (m.a === 'draw' && !S.drawn) return drawCard(1);
-  if (m.a === 'pass' && S.drawn) return passTurn(1);
-  if (m.a === 'play') {
-    const card = S.hands[1].find(c => c.id === m.cardId);
-    if (!card || (S.drawn && card.id !== S.drawn)) return sync();
-    const opt = R.cardOptions(S.board, false, card, topCard(), S.activeColor).find(o =>
-      !m.move ? !o.move : o.move && o.move.fr === m.move.fr && o.move.fc === m.move.fc && o.move.tr === m.move.tr && o.move.tc === m.move.tc);
-    if (!opt) return sync();
-    if (card.kind === 'wild' && !(m.color >= 0 && m.color < 4)) return sync();
-    return play(1, opt, m.color);
-  }
-  sync();
+// ---------- online: sunucu hakem, biz sadece gösteriyoruz ----------
+async function sendAction(body) {
+  pending = true;
+  ui = { card: null, from: null };
+  render();
+  const res = await Online.call(body);
+  pending = false;
+  if (res.error) { render(); flash(res.error); Online.poll(); return; }
+  onServer(res);
 }
 
-// Guest: host'tan gelen durum
-function onHostMessage(m) {
-  if (m.a === 'full') { Net.close(); return lobbyError('Bu oda dolu.'); }
-  if (m.a !== 'state') return;
-  const turnChanged = !S || S.turn !== m.s.turn || S.over !== m.s.over;
-  S = m.s;
-  S.deck = new Array(m.s.deck);
+// Sunucudan gelen durum (istek yanıtı, realtime ya da yoklama)
+function onServer(p) {
+  if (!p || p.error || !Online.active || !Online.session || p.id !== Online.session.id) return;
+  if (typeof p.v === 'number') { if (p.v < lastV) return; lastV = p.v; }
+  serverMeta = { status: p.status, rematch: p.rematch || [false, false] };
+  if (p.status === 'cancelled') { Online.leave(); return lobbyError('Oda kapatıldı.'); }
+  if (!p.view) return; // rakip bekleniyor
+  if (mode !== 'online') { mode = 'online'; ME = Online.session.side; S = null; hideLobby(); }
+  const v = p.view;
+  const turnChanged = !S || S.gameId !== v.gameId || S.turn !== v.turn || S.over !== v.over;
+  S = v;
+  S.deck = new Array(v.deck);
   recvAt = Date.now();
   pending = false;
-  if (!S.over) rematchAsked = false;
+  rematchAsked = !!(S.over && serverMeta.rematch[ME]);
   if (turnChanged || S.drawn) ui = { card: null, from: null };
+  updateNetStatus();
   render();
+}
+
+function updateNetStatus() {
+  if (mode !== 'online' || !Online.session) return setNetStatus('');
+  const id = Online.session.id;
+  const label = id.length === 4 ? 'Oda ' + id : 'Hızlı oyun';
+  if (!oppOnline && S && !S.over) setNetStatus('● Rakip çevrimdışı · ' + label, false);
+  else setNetStatus('● Bağlı · ' + label, true);
 }
 
 // ---------- insan arayüzü ----------
@@ -607,8 +609,13 @@ function updateClocks() {
       if (sec !== lastTickSec) { lastTickSec = sec; Sound.play('tick'); }
     }
   });
-  // Süre bitti mi? (oyunu yöneten taraf karar verir)
-  if (mode !== 'guest' && !S.over && k.since != null && clockLeft(k.running) <= 0) {
+  // Süre bitti mi? Online'da sunucu karar verir, biz sadece haber veririz
+  if (mode === 'online') {
+    if (!S.over && k.since != null && clockLeft(k.running) <= 0 && Date.now() - claimAt > 1500) {
+      claimAt = Date.now();
+      Online.call({ action: 'state' }).then(onServer);
+    }
+  } else if (!S.over && k.since != null && clockLeft(k.running) <= 0) {
     const loser = k.running;
     log('{' + loser + '} süresi bitti!', 1 - loser, true);
     endGame(1 - loser, 'Süre bitti');
@@ -691,10 +698,13 @@ function render() {
   $('#result').classList.toggle('hidden', !S.over || modalOpen || mode === 'tutorial');
   if (S.over) {
     $('#overlay-title').textContent = S.winner === ME ? 'Kazandın! 🏆' : 'Kaybettin';
-    $('#overlay-text').textContent = S.reason + '.';
+    const oppWants = mode === 'online' && serverMeta.rematch[1 - ME] && !rematchAsked;
+    const reason = S.reason === 'Rakip pes etti' && S.winner !== ME ? 'Pes ettin' : S.reason;
+    $('#overlay-text').textContent = reason + '.' + (oppWants ? ' Rakip tekrar oynamak istiyor!' : '');
     $('#again').textContent = rematchAsked ? 'Rakip bekleniyor…' : 'Tekrar Oyna';
     $('#again').disabled = rematchAsked;
   }
+  $('#resign-btn').classList.toggle('hidden', mode !== 'online' || S.over);
   renderLog();
   updateClocks();
 }
@@ -702,11 +712,12 @@ function render() {
 // ---------- lobi ----------
 function lobbyView(v) {
   $('#lobby').classList.remove('hidden');
-  ['menu', 'hosting', 'joining'].forEach(x => $('#lobby-' + x).classList.toggle('hidden', x !== v));
+  ['menu', 'hosting', 'joining', 'searching'].forEach(x => $('#lobby-' + x).classList.toggle('hidden', x !== v));
 }
 function hideLobby() { $('#lobby').classList.add('hidden'); }
 function lobbyError(msg) {
-  mode = 'bot'; ME = 0;
+  mode = 'bot'; ME = 0; S = null;
+  setNetStatus('');
   lobbyView('menu');
   $('#lobby-error').textContent = msg;
 }
@@ -732,53 +743,93 @@ function startBotGame() {
   newGame();
 }
 
-function hostRoom() {
-  if (!Net.available()) return lobbyError('Online mod yüklenemedi. İnternet bağlantını kontrol et.');
-  mode = 'host'; ME = 0;
-  lobbyView('hosting');
-  $('#room-code').textContent = '····';
-  $('#room-link').value = '';
-  Net.host({
-    onCode: code => {
-      roomCode = code;
-      $('#room-code').textContent = code;
-      $('#room-link').value = location.origin + location.pathname + '?oda=' + code;
-    },
-    onConnect: () => {
-      hideLobby();
-      setNetStatus('● Bağlı · Oda ' + roomCode, true);
-      newGame();
-    },
-    onMessage: onGuestMessage,
-    onClose: () => setNetStatus('● Rakibin bağlantısı koptu', false),
-    onError: e => lobbyError('Bağlantı hatası: ' + (e.type || e.message || e)),
-  });
+function noOnline() {
+  if (Online.available()) return false;
+  lobbyError('Online mod yüklenemedi. İnternet bağlantını kontrol et.');
+  return true;
 }
 
-let joinTimer;
-function joinRoom(code) {
+// Sunucudan oyun kimliği alındı: kanalları dinlemeye başla
+function startSession(res) {
+  lastV = -1;
+  oppOnline = true;
+  serverMeta = { status: res.status, rematch: res.rematch || [false, false] };
+  Online.listen({ id: res.id, token: res.token, chan: res.chan, side: res.side }, {
+    onState: onServer,
+    onPresence: on => { oppOnline = on; updateNetStatus(); },
+    onLive: () => updateNetStatus(),
+    waiting: () => serverMeta.status === 'waiting',
+  });
+  onServer(res);
+}
+
+function showHosting(code) {
+  lobbyView('hosting');
+  $('#room-code').textContent = code || '····';
+  $('#room-link').value = code ? location.origin + location.pathname + '?oda=' + code : '';
+}
+
+async function hostRoom() {
+  if (noOnline()) return;
+  Online.leave();
+  showHosting('');
+  const res = await Online.call({ action: 'create', tc: timeControl });
+  if (res.error) return lobbyError(res.error);
+  showHosting(res.id);
+  startSession(res);
+}
+
+async function joinRoom(code) {
   code = (code || '').trim().toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) return lobbyError('4 harfli oda kodunu gir.');
-  if (!Net.available()) return lobbyError('Online mod yüklenemedi. İnternet bağlantını kontrol et.');
-  mode = 'guest'; ME = 1; roomCode = code;
+  if (noOnline()) return;
+  const saved = Online.storedSession(true);
+  if (saved && saved.id === code) return resumeSession(saved); // bu sekme zaten bu odadaydı
+  Online.leave();
   lobbyView('joining');
-  $('#joining-code').textContent = code;
-  clearTimeout(joinTimer);
-  joinTimer = setTimeout(() => { if (!S) { Net.close(); lobbyError('Odaya bağlanılamadı. Kodu kontrol et.'); } }, 15000);
-  Net.join(code, {
-    onConnect: () => {
-      clearTimeout(joinTimer);
-      hideLobby();
-      setNetStatus('● Bağlı · Oda ' + code, true);
-    },
-    onMessage: onHostMessage,
-    onClose: () => setNetStatus('● Ev sahibinin bağlantısı koptu', false),
-    onError: e => {
-      clearTimeout(joinTimer);
-      Net.close();
-      lobbyError(e.type === 'peer-unavailable' ? 'Bu kodla açık bir oda bulunamadı.' : 'Bağlantı hatası: ' + (e.type || e.message || e));
-    },
-  });
+  $('#joining-msg').innerHTML = '<b>' + code + '</b> odasına bağlanılıyor…';
+  const res = await Online.call({ action: 'join', code });
+  if (res.error) return lobbyError(res.error);
+  startSession(res);
+}
+
+async function quickMatch() {
+  if (noOnline()) return;
+  Online.leave();
+  lobbyView('searching');
+  $('#search-tc').textContent = tcSel.options[tcSel.selectedIndex].text;
+  const res = await Online.call({ action: 'quick', tc: timeControl });
+  if (res.error) return lobbyError(res.error);
+  startSession(res);
+}
+
+async function cancelWaiting() {
+  if (Online.session) Online.call({ action: 'cancel' });
+  Online.leave();
+  lobbyError('');
+}
+
+// Yarım kalan online oyuna geri dön (sayfa yenilendi, telefon kilitlendi vb.)
+async function resumeSession(saved) {
+  if (noOnline()) return;
+  lobbyView('joining');
+  $('#joining-msg').textContent = 'Oyununa geri dönülüyor…';
+  startSession({ ...saved, status: 'waiting' });
+  const res = await Online.call({ action: 'state' });
+  if (res.error || res.status === 'cancelled' || res.status === 'over') {
+    Online.leave();
+    return res.status === 'over' ? showMenu() : lobbyError(res.error && !res.network ? 'Oyun artık mevcut değil.' : res.error || '');
+  }
+  if (res.status === 'waiting') {
+    serverMeta.status = 'waiting';
+    return saved.id.length === 4 ? showHosting(saved.id) : lobbyView('searching');
+  }
+  onServer(res);
+}
+
+function leaveOnline() {
+  if (S && S.over) Online.leave(); else Online.stop(); // bitmemiş oyuna sonra dönülebilir
+  showMenu();
 }
 
 // ---------- olaylar ----------
@@ -787,7 +838,8 @@ $('#again').onclick = doRematch;
 $('#new-game').onclick = () => {
   if (mode === 'tutorial') return showMenu();
   if (mode === 'bot') return S && !S.over && S.log.length > 2 && !confirm('Yeni oyuna başlansın mı?') ? null : showMenu();
-  if (confirm('Online oyundan çıkıp menüye dönülsün mü?')) location.href = location.pathname;
+  if (S && S.over) return leaveOnline();
+  if (confirm('Menüye dönülsün mü? Oyun sunucuda devam eder, buradan geri dönebilirsin.')) leaveOnline();
 };
 $('#speed').onchange = e => (botDelay = +e.target.value);
 function showLevel() {
@@ -816,7 +868,16 @@ $('#coach-exit').onclick = showMenu;
 $('#btn-host').onclick = hostRoom;
 $('#btn-join').onclick = () => joinRoom($('#join-code').value);
 $('#join-code').onkeydown = e => { if (e.key === 'Enter') joinRoom(e.target.value); };
-$('#cancel-host').onclick = $('#cancel-join').onclick = () => { Net.close(); lobbyError(''); };
+$('#cancel-host').onclick = $('#cancel-search').onclick = cancelWaiting;
+$('#cancel-join').onclick = () => { Online.leave(); lobbyError(''); };
+$('#btn-quick').onclick = quickMatch;
+$('#btn-resume').onclick = () => { const s = Online.storedSession(); if (s) resumeSession(s); };
+$('#resign-btn').onclick = () => {
+  if (mode === 'online' && S && !S.over && confirm('Pes etmek istediğine emin misin?')) sendAction({ action: 'resign' });
+};
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && mode === 'online') Online.poll(); // telefona geri dönünce hemen tazele
+});
 $('#copy-link').onclick = () => {
   navigator.clipboard.writeText($('#room-link').value).then(() => {
     $('#copy-link').textContent = 'Kopyalandı ✓';
@@ -833,6 +894,8 @@ function showMenu() {
   $('#coach').classList.add('hidden');
   document.body.classList.remove('tutorial');
   $('#btn-tutorial').classList.toggle('new', !Tutorial.isDone());
+  $('#btn-resume').classList.toggle('hidden', !Online.storedSession());
+  setNetStatus('');
   lobbyView('menu');
   $('#lobby-error').textContent = '';
 }
@@ -860,4 +923,7 @@ if (isIOS && !standalone) $('#ios-install').classList.remove('hidden');
 
 // Başlangıç: link ?oda=KOD içeriyorsa direkt katıl, yoksa menüyü göster
 const linkCode = new URLSearchParams(location.search).get('oda');
-if (linkCode) joinRoom(linkCode); else showMenu();
+const savedSession = Online.storedSession(!!linkCode); // davet linkiyle gelindiyse sadece bu sekmenin oturumu
+if (savedSession && (!linkCode || savedSession.id === linkCode.toUpperCase())) resumeSession(savedSession);
+else if (linkCode) joinRoom(linkCode);
+else showMenu();

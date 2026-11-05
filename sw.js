@@ -1,16 +1,16 @@
 // Şahkart servis çalışanı: oyun dosyalarını önbellekte tutar, internet yokken de bota karşı oynanır.
 // Dosyalar güncellenince VERSION değerini artır.
-const VERSION = 'sahkart-v3';
+const VERSION = 'sahkart-v4';
 const SHELL = [
-  './', 'index.html', 'style.css', 'rules.js', 'net.js', 'sound.js', 'tutorial.js', 'game.js',
+  './', 'index.html', 'style.css', 'rules.js', 'online.js', 'sound.js', 'tutorial.js', 'game.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'icons/icon.svg',
 ];
-const PEERJS = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js';
 
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(VERSION)
-      .then(c => c.addAll(SHELL).then(() => c.add(PEERJS).catch(() => {}))) // online kütüphanesi: alınamazsa sorun değil
+      .then(c => c.addAll(SHELL).then(() => c.add(SUPABASE_JS).catch(() => {}))) // online kütüphanesi: alınamazsa sorun değil
       .then(() => self.skipWaiting()),
   );
 });
@@ -28,7 +28,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  const ours = url.origin === location.origin || url.href.startsWith('https://unpkg.com/peerjs');
+  const ours = url.origin === location.origin || url.href === SUPABASE_JS;
   if (!ours) return;
   e.respondWith(
     caches.open(VERSION).then(async cache => {

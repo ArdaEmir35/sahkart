@@ -212,3 +212,9 @@ body.tutorial .board-wrap { --sq: min(58px, calc((100vh - 480px) / 8), calc((100
 /* Yükleme */
 .lobby button.install { width: 100%; margin-top: 12px; color: #cfe0f2; }
 .install-tip { font-size: 13px; color: #8fa0b4; margin: 12px 0 0; }
+
+/* Online */
+.lobby button.quick { background: #e04050; color: #fff; }
+.lobby button.resume { background: #ffffff14; border: 1px solid #ffd166; color: #ffd166; margin: 0 0 10px; }
+button.ghost.danger { border-color: #ff8a8a88; color: #ff9a9a; }
+button.ghost.danger:hover { background: #ff8a8a18; }
