@@ -210,6 +210,13 @@ function canAct() {
 }
 
 function doPlay(opt, color) {
+  if (mode === 'tutorial') {
+    const err = Tutorial.check({ type: 'play', opt, color });
+    ui = { card: null, from: null };
+    if (err) { render(); return flash(err); }
+    play(ME, opt, color);
+    return Tutorial.advance();
+  }
   if (mode === 'guest') {
     pending = true;
     const m = opt.move;
@@ -222,6 +229,13 @@ function doPlay(opt, color) {
 
 function doDrawOrPass() {
   if (!canAct()) return;
+  if (mode === 'tutorial') {
+    const type = S.drawn ? 'pass' : 'draw';
+    const err = Tutorial.check({ type });
+    if (err) return flash(err);
+    if (type === 'pass') passTurn(ME); else drawCard(ME);
+    return Tutorial.advance();
+  }
   if (mode === 'guest') { pending = true; Net.send({ a: S.drawn ? 'pass' : 'draw' }); return render(); }
   if (S.drawn) passTurn(ME); else drawCard(ME);
 }
@@ -497,6 +511,7 @@ function renderLog() {
 }
 
 let lastBoardKey = '';
+let tutHint = {};
 function drawBoard(boardEl, flip, fromSet, toSet, targetZone) {
   boardEl.innerHTML = '';
   for (let dr = 0; dr < 8; dr++)
@@ -509,6 +524,7 @@ function drawBoard(boardEl, flip, fromSet, toSet, targetZone) {
       const lm = S.lastMove;
       if (lm && ((lm.fr === r && lm.fc === c) || (lm.tr === r && lm.tc === c))) sq.classList.add('last', lm.tr === r && lm.tc === c ? 'last-to' : 'last-from');
       if (fromSet.has(k)) sq.classList.add('can-from');
+      if (tutHint.squares && tutHint.squares.has(k)) sq.classList.add('hint-sq');
       if (ui.from && ui.from[0] === r && ui.from[1] === c) sq.classList.add('sel');
       if (toSet.has(k)) sq.classList.add(S.board[r][c] ? 'can-cap' : 'can-to');
       const p = S.board[r][c];
@@ -609,10 +625,11 @@ function render() {
   const toSet = new Set(ui.from ? selOpts.filter(o => o.move.fr === ui.from[0] && o.move.fc === ui.from[1]).map(o => o.move.tr * 8 + o.move.tc) : []);
   const targetZone = ui.card && ui.card.kind === 'piece' ? ui.card.color : null;
   const flip = ME === 1; // siyah oynayan kendi taşlarını altta görür
+  tutHint = mode === 'tutorial' ? Tutorial.hint() : {};
 
   // Tahta (değişmediyse yeniden çizme, yoksa taş animasyonu yarıda kesilir)
   const boardEl = $('#board');
-  const boardKey = JSON.stringify([S.board, S.lastMove, ui.card && ui.card.id, ui.from, flip, topCard().id, S.activeColor]);
+  const boardKey = JSON.stringify([S.board, S.lastMove, ui.card && ui.card.id, ui.from, flip, topCard().id, S.activeColor, [...(tutHint.squares || [])]]);
   if (boardKey !== lastBoardKey) { lastBoardKey = boardKey; drawBoard(boardEl, flip, fromSet, toSet, targetZone); }
   animateLastMove(boardEl, flip);
   playNewSounds();
@@ -633,6 +650,7 @@ function render() {
   sorted.forEach(card => {
     const playable = active && (!S.drawn || card.id === S.drawn) && myOptions(card).length > 0;
     const el = cardEl(card, { playable, dim: active && !playable, selected: ui.card && ui.card.id === card.id });
+    if (tutHint.card === card.id && !(ui.card && ui.card.id === card.id)) el.classList.add('hint');
     el.onclick = () => onCardClick(card);
     myHand.appendChild(el);
   });
@@ -646,12 +664,17 @@ function render() {
   ac.className = 'active-color c' + S.activeColor;
   ac.textContent = R.COLOR_NAMES[S.activeColor];
   $('#draw-btn').disabled = !active;
+  $('#draw-btn').classList.toggle('hint', !!tutHint.deck);
+  $('#coach').classList.toggle('hidden', mode !== 'tutorial');
+  document.body.classList.toggle('tutorial', mode === 'tutorial');
+  if (mode === 'tutorial') Tutorial.renderCoach();
   $('#draw-label').textContent = S.turn === ME && S.drawn ? 'Pas geç' : 'Kart çek';
 
   // Durum
   const st = $('#status');
   if (!st.classList.contains('warn')) {
-    if (S.over) st.textContent = S.winner === ME ? 'Kazandın!' : nameOf(S.winner) + ' kazandı.';
+    if (mode === 'tutorial') st.textContent = '';
+    else if (S.over) st.textContent = S.winner === ME ? 'Kazandın!' : nameOf(S.winner) + ' kazandı.';
     else if (S.turn !== ME) st.textContent = mode === 'bot' ? 'Bot düşünüyor…' : 'Rakibin sırası…';
     else if (pending) st.textContent = 'Gönderiliyor…';
     else if (!ui.card && S.drawn) st.textContent = 'Çektiğin kartı oynayabilir ya da pas geçebilirsin.';
@@ -663,9 +686,9 @@ function render() {
   $('#turn-opp').classList.toggle('on', S.turn === OPP && !S.over);
 
   // Pencereler: renk seçimi / oyun sonu
-  $('#overlay').classList.toggle('hidden', !modalOpen && !S.over);
+  $('#overlay').classList.toggle('hidden', !modalOpen && (!S.over || mode === 'tutorial'));
   $('#color-pick').classList.toggle('hidden', !modalOpen);
-  $('#result').classList.toggle('hidden', !S.over || modalOpen);
+  $('#result').classList.toggle('hidden', !S.over || modalOpen || mode === 'tutorial');
   if (S.over) {
     $('#overlay-title').textContent = S.winner === ME ? 'Kazandın! 🏆' : 'Kaybettin';
     $('#overlay-text').textContent = S.reason + '.';
@@ -693,6 +716,13 @@ function setNetStatus(text, ok) {
   el.className = 'net-status ' + (ok ? 'ok' : 'bad');
   el.classList.toggle('hidden', !text);
   $('#speed-wrap').classList.toggle('hidden', mode !== 'bot');
+}
+
+function startTutorial() {
+  mode = 'tutorial'; ME = 0;
+  hideLobby();
+  setNetStatus('');
+  Tutorial.start();
 }
 
 function startBotGame() {
@@ -755,6 +785,7 @@ function joinRoom(code) {
 $('#draw-btn').onclick = doDrawOrPass;
 $('#again').onclick = doRematch;
 $('#new-game').onclick = () => {
+  if (mode === 'tutorial') return showMenu();
   if (mode === 'bot') return S && !S.over && S.log.length > 2 && !confirm('Yeni oyuna başlansın mı?') ? null : showMenu();
   if (confirm('Online oyundan çıkıp menüye dönülsün mü?')) location.href = location.pathname;
 };
@@ -779,6 +810,9 @@ soundBtn.onclick = () => { Sound.setMuted(!Sound.isMuted()); showSound(); if (!S
 showSound();
 $('#rules-btn').onclick = () => $('#rules').classList.toggle('hidden');
 $('#btn-bot').onclick = startBotGame;
+$('#btn-tutorial').onclick = startTutorial;
+$('#coach-next').onclick = () => Tutorial.next();
+$('#coach-exit').onclick = showMenu;
 $('#btn-host').onclick = hostRoom;
 $('#btn-join').onclick = () => joinRoom($('#join-code').value);
 $('#join-code').onkeydown = e => { if (e.key === 'Enter') joinRoom(e.target.value); };
@@ -795,6 +829,10 @@ document.addEventListener('keydown', e => {
 
 function showMenu() {
   S = null; // arkadaki oyunu durdur (bot ve saat)
+  mode = 'bot';
+  $('#coach').classList.add('hidden');
+  document.body.classList.remove('tutorial');
+  $('#btn-tutorial').classList.toggle('new', !Tutorial.isDone());
   lobbyView('menu');
   $('#lobby-error').textContent = '';
 }

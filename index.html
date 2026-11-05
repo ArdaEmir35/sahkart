@@ -42,7 +42,15 @@
 
   <main>
     <section class="play">
-      <div class="hand-row">
+      <div id="coach" class="hidden">
+        <div class="coach-head"><span>🎓</span> <b id="coach-step"></b><span id="coach-dots" class="dots"></span></div>
+        <p id="coach-text"></p>
+        <div class="coach-btns">
+          <button id="coach-exit" class="ghost">Eğitimden çık</button>
+          <button id="coach-next" class="hidden">Devam →</button>
+        </div>
+      </div>
+      <div class="hand-row opp-row">
         <div class="who">
           <span id="turn-opp" class="turn"><span id="opp-label"></span></span>
           <span id="clock-opp" class="clock hidden"></span>
@@ -121,6 +129,7 @@
             <option value="900+10">15 dk + 10 sn</option>
           </select>
         </label>
+        <button id="btn-tutorial" class="big tut">🎓 Nasıl oynanır? <small>2 dakikalık eğitim</small></button>
         <button id="btn-bot" class="big">🤖 Bota karşı oyna</button>
         <div id="level" class="level-row" role="radiogroup" aria-label="Bot seviyesi">
           <button data-level="easy">Kolay</button>
@@ -159,6 +168,7 @@
   <script src="net.js"></script>
   <script src="sound.js"></script>
   <script src="rules.js"></script>
+  <script src="tutorial.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
