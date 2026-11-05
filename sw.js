@@ -1,6 +1,6 @@
 // Şahkart servis çalışanı: oyun dosyalarını önbellekte tutar, internet yokken de bota karşı oynanır.
-// Dosyalar güncellenince VERSION değerini artır.
-const VERSION = 'sahkart-v4';
+// İnternet varken her zaman sunucudaki güncel dosyalar kullanılır.
+const VERSION = 'sahkart-v5';
 const SHELL = [
   './', 'index.html', 'style.css', 'rules.js', 'online.js', 'sound.js', 'tutorial.js', 'game.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'icons/icon.svg',
@@ -23,21 +23,20 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Önce önbellekten hızlıca ver, arkada ağdan tazele (stale-while-revalidate)
+// Önce ağdan al (her zaman güncel sürüm), internet yoksa önbellekten ver
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   const ours = url.origin === location.origin || url.href === SUPABASE_JS;
   if (!ours) return;
+  const key = req.mode === 'navigate' ? './' : req; // ?oda=KOD linkleri de ana sayfayı açar
   e.respondWith(
-    caches.open(VERSION).then(async cache => {
-      const key = req.mode === 'navigate' ? './' : req; // ?oda=KOD linkleri de ana sayfayı açar
-      const cached = await cache.match(key, { ignoreSearch: req.mode === 'navigate' });
-      const fresh = fetch(req)
-        .then(res => { if (res.ok) cache.put(key, res.clone()); return res; })
-        .catch(() => cached);
-      return cached || fresh;
-    }),
+    fetch(req)
+      .then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(key, copy)); }
+        return res;
+      })
+      .catch(() => caches.open(VERSION).then(c => c.match(key, { ignoreSearch: req.mode === 'navigate' }))),
   );
 });
