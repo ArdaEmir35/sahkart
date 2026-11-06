@@ -337,3 +337,4 @@ body.puzzle-mode .pile-box:has(#draw-btn) { display: none; }
 /* iOS: kartın/karenin içindeki öğeler dokunuşu yutmasın; tıklama doğrudan karta/kareye gitsin */
 .card > *, .sq > .piece, .deck-btn > *, .pz-tile > *, .chat-btn > * { pointer-events: none; }
 .sq, .card { cursor: pointer; }
+@media (max-width: 700px) { #status { min-height: 2.6em; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 6px; } }

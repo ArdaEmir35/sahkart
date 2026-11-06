@@ -1,6 +1,6 @@
 // Şahkart servis çalışanı: oyun dosyalarını önbellekte tutar, internet yokken de bota karşı oynanır.
 // İnternet varken her zaman sunucudaki güncel dosyalar kullanılır.
-const VERSION = 'sahkart-v8';
+const VERSION = 'sahkart-v9';
 const SHELL = [
   './', 'index.html', 'privacy.html', 'style.css', 'i18n.js', 'analytics.js', 'rules.js', 'core.js', 'online.js', 'sound.js', 'tutorial.js', 'puzzles.js', 'game.js',
   'manifest.webmanifest', 'manifest-tr.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'icons/icon.svg',

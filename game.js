@@ -415,6 +415,24 @@ function logHtml(e) {
   return '';
 }
 
+// Dokunma: kart ve kareler <div> olduğu için iOS bazen "click" üretmiyor. Parmak kaldırıldığında
+// (pointerup) doğrudan işle; ardından gelebilecek "click"i yut ki iki kez tetiklenmesin.
+let lastTapAt = 0;
+function onTap(el, fn) {
+  let start = null;
+  el.addEventListener('pointerdown', e => { start = { x: e.clientX, y: e.clientY, id: e.pointerId }; });
+  el.addEventListener('pointercancel', () => { start = null; });
+  el.addEventListener('pointerup', e => {
+    if (!start || e.pointerId !== start.id) return;
+    const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y);
+    start = null;
+    if (moved > 12 || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    lastTapAt = Date.now();
+    fn(e);
+  });
+  el.addEventListener('click', e => { if (Date.now() - lastTapAt > 600) fn(e); });
+}
+
 let renderedLogLen = 0;
 function renderLog() {
   const box = $('#log');
@@ -453,7 +471,7 @@ function drawBoard(boardEl, flip, fromSet, toSet, targetZone) {
         pe.textContent = R.GLYPH[p.t] + '︎';
         sq.appendChild(pe);
       }
-      sq.onclick = () => onSquareClick(r, c);
+      onTap(sq, () => onSquareClick(r, c));
       boardEl.appendChild(sq);
     }
 }
@@ -574,7 +592,7 @@ function render() {
     const playable = active && (!S.drawn || card.id === S.drawn) && myOptions(card).length > 0;
     const el = cardEl(card, { playable, dim: active && !playable, selected: ui.card && ui.card.id === card.id });
     if (tutHint.card === card.id && !(ui.card && ui.card.id === card.id)) el.classList.add('hint');
-    el.onclick = () => onCardClick(card);
+    onTap(el, () => onCardClick(card));
     myHand.appendChild(el);
   });
 

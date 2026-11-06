@@ -19,5 +19,8 @@ cpSync('node_modules/@supabase/supabase-js/dist/umd/supabase.js', 'www/vendor/su
 const html = readFileSync('www/index.html', 'utf8');
 const cdn = /<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@[^"]+"><\/script>/;
 if (!cdn.test(html)) throw new Error('index.html içinde Supabase CDN satırı bulunamadı');
-writeFileSync('www/index.html', html.replace(cdn, '<script src="vendor/supabase.js"></script>'));
+let out = html.replace(cdn, '<script src="vendor/supabase.js"></script>');
+// --debug: dokunma olaylarını ekrana yazan geliştirme katmanı
+if (process.argv.includes('--debug')) out = out.replace('</head>', readFileSync('tools/debug-overlay.html', 'utf8') + '</head>');
+writeFileSync('www/index.html', out);
 console.log('www/ hazır:', FILES.length, 'dosya + icons/');

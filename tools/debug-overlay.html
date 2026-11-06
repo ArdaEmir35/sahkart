@@ -1,0 +1,14 @@
+<script>
+// GELİŞTİRME: dokunma olaylarını ekrana yazar (sadece tools/build-www.mjs --debug ile eklenir)
+(function () {
+  const box = () => { let b = document.getElementById('dbg'); if (!b) { b = document.createElement('div'); b.id = 'dbg';
+    b.style.cssText = 'position:fixed;left:0;right:0;top:60px;z-index:99999;background:#000c;color:#0f0;font:10px monospace;padding:4px;pointer-events:none;white-space:pre-wrap;max-height:200px;overflow:hidden';
+    document.body.appendChild(b); } return b; };
+  const log = (...a) => { const b = box(); b.textContent = (a.join(' ') + '\n' + b.textContent).slice(0, 1400); };
+  window.onerror = (m, src, l, c) => log('ERR', m, (src || '').split('/').pop(), l, c);
+  ['touchstart', 'touchend', 'click'].forEach(ev => document.addEventListener(ev, e => {
+    const t = e.target; const p = e.changedTouches ? e.changedTouches[0] : e;
+    log((performance.now() / 1000).toFixed(2), ev, t.tagName + '#' + t.id + '.' + String(t.className).slice(0, 22), Math.round(p.clientX) + ',' + Math.round(p.clientY), 'sy=' + Math.round(scrollY));
+  }, true));
+})();
+</script>
