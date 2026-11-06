@@ -19,6 +19,21 @@ const CORS = {
 const TC_ALLOWED = new Set(['0', '60+2', '180+2', '300+0', '300+3', '600+0', '600+5', '900+10']);
 const LETTERS = 'ABCDEFGHJKLMNPRSTUVYZ';
 
+// Sohbet: hazır mesajlar ve emojiler her oyunda; serbest yazı sadece arkadaş odalarında.
+// Mesajlar saklanmaz, sadece iki oyuncuya iletilir.
+const PHRASES = new Set(['hi', 'gl', 'nice', 'wow', 'oops', 'thanks', 'think', 'hurry', 'gg', 'rematch']);
+const EMOJIS = new Set(['👍', '😂', '😮', '😅', '🔥', '👏', '😎', '🤔', '😢', '❤️']);
+const chatTimes = new Map(); // oyun+taraf -> son mesaj zamanları (basit hız sınırı)
+function chatAllowed(key) {
+  const now = Date.now();
+  const list = (chatTimes.get(key) || []).filter(x => now - x < 10000);
+  if (list.length >= 6) return false;
+  list.push(now);
+  chatTimes.set(key, list);
+  if (chatTimes.size > 5000) chatTimes.clear();
+  return true;
+}
+
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 const secret = () => crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '').slice(0, 8);
@@ -50,6 +65,17 @@ async function broadcast(g) {
       body: JSON.stringify({ messages }),
     });
   } catch (_) { /* istemciler ayrıca yoklama yapıyor */ }
+}
+
+async function sendChat(g, msg) {
+  const messages = [g.p0_chan, g.p1_chan].filter(Boolean).map(topic => ({ topic, event: 'chat', payload: msg }));
+  try {
+    await fetch(URL + '/realtime/v1/api/broadcast', {
+      method: 'POST',
+      headers: { apikey: KEY, Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages }),
+    });
+  } catch (_) { /* sohbet en iyi çaba ile iletilir */ }
 }
 
 async function load(id) {
@@ -146,6 +172,23 @@ async function handle(b) {
         await db.from('games').update({ updated_at: new Date().toISOString() }).eq('id', g.id).eq('status', 'waiting');
       }
       return payloadFor(g, side);
+    }
+
+    case 'chat': {
+      const g = await load(b.id);
+      if (!g) return { error: 'notFound' };
+      const side = sideOf(g, b.token);
+      if (side < 0) return { error: 'notPlayer' };
+      if (!g.state) return { error: 'notStarted' };
+      let value = b.value;
+      if (b.kind === 'phrase' && PHRASES.has(value)) { /* geçerli */ }
+      else if (b.kind === 'emoji' && EMOJIS.has(value)) { /* geçerli */ }
+      else if (b.kind === 'text' && g.kind === 'room' && typeof value === 'string' && value.trim()) value = value.trim().slice(0, 200);
+      else return { error: 'badChat' };
+      if (!chatAllowed(g.id + ':' + side)) return { error: 'chatTooFast' };
+      const msg = { id: crypto.randomUUID().slice(0, 8), from: side, kind: b.kind, value, at: Date.now() };
+      await sendChat(g, msg);
+      return { ok: true, msg };
     }
 
     case 'cancel':

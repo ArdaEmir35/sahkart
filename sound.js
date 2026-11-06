@@ -79,6 +79,7 @@ const Sound = (() => {
     win: t => [523, 659, 784, 1047].forEach((f, i) => tone(t + i * 0.11, { freq: f, type: 'triangle', gain: 0.22, decay: i === 3 ? 0.6 : 0.2 })),
     lose: t => [440, 392, 330, 262].forEach((f, i) => tone(t + i * 0.14, { freq: f, type: 'triangle', gain: 0.2, decay: i === 3 ? 0.6 : 0.22 })),
     tick: t => tone(t, { freq: 1100, type: 'square', gain: 0.05, attack: 0.001, decay: 0.03 }),
+    chat: t => { tone(t, { freq: 880, type: 'sine', gain: 0.12, decay: 0.07 }); tone(t + 0.07, { freq: 1320, type: 'sine', gain: 0.1, decay: 0.1 }); },
   };
 
   function play(name, delay = 0) {

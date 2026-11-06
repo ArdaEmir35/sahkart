@@ -611,6 +611,7 @@ function render() {
   }
   $('#resign-btn').classList.toggle('hidden', mode !== 'online' || S.over);
   trackLifecycle();
+  renderChat();
   renderLog();
   updateClocks();
 }
@@ -648,6 +649,7 @@ function lobbyError(msg) {
 function setNetStatus(text, ok) {
   const el = $('#net-status');
   el.textContent = text;
+  el.title = text;
   el.className = 'net-status ' + (ok ? 'ok' : 'bad');
   el.classList.toggle('hidden', !text);
   $('#speed-wrap').classList.toggle('hidden', mode !== 'bot');
@@ -677,10 +679,12 @@ function noOnline() {
 // Sunucudan oyun kimliği alındı: kanalları dinlemeye başla
 function startSession(res) {
   lastV = -1;
+  resetChat();
   oppOnline = true;
   serverMeta = { status: res.status, rematch: res.rematch || [false, false] };
   Online.listen({ id: res.id, token: res.token, chan: res.chan, side: res.side }, {
     onState: onServer,
+    onChat,
     onPresence: on => {
       // Kısa kopmaları (sayfa yükleniyor, ağ değişiyor) uyarı olarak gösterme
       clearTimeout(presenceTimer);
@@ -851,6 +855,8 @@ function showMenu() {
   if (S && !S.over && (mode === 'bot' || mode === 'online')) Analytics.track('game_abandon', { mode: gameKind(), moves: S.moveNo });
   if (mode === 'tutorial') Analytics.track('tutorial_exit', { lesson: Tutorial.lessonNo });
   S = null; // arkadaki oyunu durdur (bot ve saat)
+  $('#chat-pop').classList.add('hidden');
+  $('#chat-btn').classList.add('hidden');
   mode = 'bot';
   $('#coach').classList.add('hidden');
   document.body.classList.remove('tutorial');
@@ -895,6 +901,111 @@ $('#consent-no').onclick = () => { Analytics.setConsent(false); showConsent(); }
 $('#btn-stats').onclick = () => { Analytics.setConsent(Analytics.consent() !== 'yes'); showConsent(); };
 I18N.onChange(showConsent);
 showConsent();
+
+// ---------- sohbet (online) ----------
+// Hazır mesajlar ve emojiler her online oyunda; serbest yazı sadece arkadaş odalarında.
+// Hazır mesajlar kod olarak gider, her oyuncu kendi dilinde görür. Mesajlar saklanmaz.
+const PHRASES = ['hi', 'gl', 'nice', 'wow', 'oops', 'thanks', 'think', 'hurry', 'gg', 'rematch'];
+const EMOJIS = ['👍', '😂', '😮', '😅', '🔥', '👏', '😎', '🤔', '😢', '❤️'];
+let chatLog = [], chatSeen = new Set(), chatUnread = 0, chatMuted = false, chatLastSent = 0;
+const isRoom = () => !!(Online.session && Online.session.id.length === 4);
+const chatText = m => (m.kind === 'phrase' ? t('chat.p.' + m.value) : m.value);
+
+function resetChat() {
+  chatLog = []; chatSeen = new Set(); chatUnread = 0; chatMuted = false;
+  $('#chat-pop').classList.add('hidden');
+  renderChat();
+}
+
+function onChat(m) {
+  if (!m || chatSeen.has(m.id)) return;
+  chatSeen.add(m.id);
+  const mine = m.from === ME;
+  if (!mine && chatMuted) return;
+  chatLog.push(m);
+  if (chatLog.length > 30) chatLog.shift();
+  showBubble(mine ? '#bubble-me' : '#bubble-opp', chatText(m), m.kind === 'emoji');
+  if (!mine) {
+    Sound.play('chat');
+    if ($('#chat-pop').classList.contains('hidden')) chatUnread++;
+  }
+  renderChat();
+}
+
+const bubbleTimers = {};
+function showBubble(sel, text, big) {
+  const el = $(sel);
+  el.textContent = text;
+  el.classList.toggle('big', !!big);
+  el.classList.remove('hidden');
+  el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  clearTimeout(bubbleTimers[sel]);
+  bubbleTimers[sel] = setTimeout(() => el.classList.add('hidden'), 3500);
+}
+
+async function sendChat(kind, value) {
+  if (mode !== 'online' || !Online.session) return;
+  if (Date.now() - chatLastSent < 1200) return flash(t('err.chatTooFast'));
+  chatLastSent = Date.now();
+  const res = await Online.call({ action: 'chat', kind, value });
+  if (res.error) return flash(errText(res.error));
+  onChat(res.msg);
+  Analytics.track('chat', { kind });
+}
+
+function renderChat() {
+  const online = mode === 'online' && !!S;
+  $('#chat-btn').classList.toggle('hidden', !online);
+  $('#chat-badge').textContent = chatUnread;
+  $('#chat-badge').classList.toggle('hidden', !chatUnread);
+  $('#chat-mute').textContent = t(chatMuted ? 'chat.unmute' : 'chat.mute');
+  $('#chat-form').classList.toggle('hidden', !isRoom());
+  $('#chat-note').classList.toggle('hidden', isRoom());
+  const hist = $('#chat-hist');
+  hist.innerHTML = chatLog.length ? '' : '<p class="chat-empty">' + esc(t('chat.empty')) + '</p>';
+  chatLog.forEach(m => {
+    const line = document.createElement('div');
+    line.className = 'chat-line ' + (m.from === ME ? 'me' : 'opp');
+    line.innerHTML = '<b>' + esc(nameOf(m.from)) + ':</b> ' + esc(chatText(m));
+    hist.appendChild(line);
+  });
+  hist.scrollTop = hist.scrollHeight;
+}
+
+function buildChatButtons() {
+  $('#chat-phrases').innerHTML = '';
+  PHRASES.forEach(p => {
+    const b = document.createElement('button');
+    b.textContent = t('chat.p.' + p);
+    b.onclick = () => sendChat('phrase', p);
+    $('#chat-phrases').appendChild(b);
+  });
+  $('#chat-emojis').innerHTML = '';
+  EMOJIS.forEach(e => {
+    const b = document.createElement('button');
+    b.textContent = e;
+    b.onclick = () => sendChat('emoji', e);
+    $('#chat-emojis').appendChild(b);
+  });
+}
+
+$('#chat-btn').onclick = () => {
+  const pop = $('#chat-pop');
+  pop.classList.toggle('hidden');
+  if (!pop.classList.contains('hidden')) chatUnread = 0;
+  renderChat();
+};
+$('#chat-close').onclick = () => $('#chat-pop').classList.add('hidden');
+$('#chat-mute').onclick = () => { chatMuted = !chatMuted; renderChat(); };
+$('#chat-form').onsubmit = e => {
+  e.preventDefault();
+  const v = $('#chat-input').value.trim();
+  if (!v) return;
+  $('#chat-input').value = '';
+  sendChat('text', v);
+};
+I18N.onChange(() => { buildChatButtons(); renderChat(); });
+buildChatButtons();
 
 // ---------- mobil düzen: ortadaki kart ve deste, telefonda elin hemen üstüne taşınır ----------
 const narrow = matchMedia('(max-width: 700px)');

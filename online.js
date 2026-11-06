@@ -54,6 +54,7 @@ const Online = (() => {
       const c = client().channel(s.chan);
       chan = c;
       c.on('broadcast', { event: 'state' }, m => chan === c && handlers.onState && handlers.onState(m.payload))
+        .on('broadcast', { event: 'chat' }, m => chan === c && handlers.onChat && handlers.onChat(m.payload))
         .subscribe(status => {
           if (chan !== c) return; // eski kanaldan gelen kapanma bildirimi
           live = status === 'SUBSCRIBED';

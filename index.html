@@ -21,7 +21,7 @@
     <div class="header-right">
       <select id="lang-sel" class="lang-sel" data-i18n-aria="hdr.lang"><option value="en">EN</option><option value="tr">TR</option></select>
       <button id="sound-btn" class="ghost icon">🔊</button>
-      <button id="feedback-btn" class="ghost icon" data-i18n-title="hdr.feedback">💬</button>
+      <button id="feedback-btn" class="ghost icon" data-i18n-title="hdr.feedback">✉️</button>
       <button id="rules-btn" class="ghost" data-i18n="hdr.rules">Rules</button>
       <span id="net-status" class="net-status hidden"></span>
       <label id="speed-wrap"><span class="speed-lbl" data-i18n="hdr.speed">Bot speed</span>
@@ -65,6 +65,7 @@
       <div class="hand-row opp-row">
         <div class="who">
           <span id="turn-opp" class="turn"><span id="opp-label"></span></span>
+          <span id="bubble-opp" class="bubble hidden"></span>
           <span id="clock-opp" class="clock hidden"></span>
         </div>
         <div id="opp-hand" class="hand small"></div>
@@ -82,6 +83,8 @@
         <div class="who">
           <span id="turn-me" class="turn" data-i18n="name.you">You</span>
           <span id="clock-me" class="clock hidden"></span>
+          <button id="chat-btn" class="chat-btn hidden" data-i18n-title="chat.title">💬<span id="chat-badge" class="badge hidden"></span></button>
+          <span id="bubble-me" class="bubble me hidden"></span>
         </div>
         <div id="my-hand" class="hand"></div>
       </div>
@@ -193,6 +196,22 @@
         <button id="cancel-join" class="ghost" data-i18n="lobby.cancel"></button>
       </div>
     </div>
+  </div>
+
+  <div id="chat-pop" class="chat-pop hidden" role="dialog">
+    <div class="chat-head">
+      <b data-i18n="chat.title"></b>
+      <button id="chat-mute" class="linkbtn"></button>
+      <button id="chat-close" class="ghost icon">✕</button>
+    </div>
+    <div id="chat-hist" class="chat-hist"></div>
+    <div id="chat-phrases" class="chat-phrases"></div>
+    <div id="chat-emojis" class="chat-emojis"></div>
+    <form id="chat-form" class="chat-form hidden">
+      <input id="chat-input" maxlength="200" autocomplete="off" data-i18n-ph="chat.ph">
+      <button type="submit" data-i18n="chat.send"></button>
+    </form>
+    <p id="chat-note" class="chat-note" data-i18n="chat.textNote"></p>
   </div>
 
   <div id="fb" class="fb-wrap hidden">
