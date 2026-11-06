@@ -298,3 +298,25 @@ button, .sq, .card, select { touch-action: manipulation; }
 @media (max-width: 700px) {
   .net-status { white-space: nowrap; max-width: 84px; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* Bulmacalar */
+.lobby button.puzzles { background: #8b5cf6; color: #fff; }
+.pz-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 12px 0; max-height: 46vh; overflow-y: auto; }
+.pz-tile { display: flex; flex-direction: column; align-items: center; padding: 6px 0; background: #0d1520; border: 1px solid #ffffff22; border-radius: 8px; line-height: 1.1; }
+.pz-tile b { font-size: 16px; } .pz-tile small { font-size: 9px; color: #ffd166; letter-spacing: -1px; }
+.pz-tile:hover { border-color: #ffd166; }
+.pz-tile.solved { background: #18302a; border-color: #7ee2a0aa; }
+.pz-tile.solved b::after { content: ' ✓'; color: #7ee2a0; font-size: 12px; }
+#coach.fail { border-color: #ff8a8a99; background: #301b20; }
+#coach.fail .coach-head { color: #ff9a9a; }
+.coach-right { display: flex; gap: 6px; }
+.pz-turns { color: #9fb0c3; font-size: 13px; }
+.pz-count { font-size: 12px; color: #9fb0c3; }
+#coach.puzzle .dots { gap: 0; }
+
+body.puzzle-mode .pile-box:has(#draw-btn) { display: none; }
+@media (max-width: 700px) {
+  body.tutorial #coach { padding: 8px 12px; }
+  body.tutorial #coach-text { margin: 4px 0 6px; font-size: 14px; }
+  body.tutorial .coach-btns button { padding: 5px 10px; font-size: 13px; }
+}

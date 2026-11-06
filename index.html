@@ -59,7 +59,11 @@
         <p id="coach-text"></p>
         <div class="coach-btns">
           <button id="coach-exit" class="ghost" data-i18n="coach.exit">Exit tutorial</button>
-          <button id="coach-next" class="hidden">Next →</button>
+          <span class="coach-right">
+            <button id="coach-hint" class="ghost hidden" data-i18n="pz.hint"></button>
+            <button id="coach-retry" class="ghost hidden" data-i18n="pz.retry"></button>
+            <button id="coach-next" class="hidden">Next →</button>
+          </span>
         </div>
       </div>
       <div class="hand-row opp-row">
@@ -150,6 +154,7 @@
         </label>
         <button id="btn-resume" class="big resume hidden" data-i18n="lobby.resume"></button>
         <button id="btn-tutorial" class="big tut"><span data-i18n="lobby.tutorial"></span> <small data-i18n="lobby.tutorialSub"></small></button>
+        <button id="btn-puzzles" class="big puzzles" data-i18n="lobby.puzzles"></button>
         <button id="btn-bot" class="big" data-i18n="lobby.bot"></button>
         <div id="level" class="level-row" role="radiogroup" data-i18n-aria="lobby.level">
           <button data-level="easy" data-i18n="level.easy"></button>
@@ -171,6 +176,12 @@
           <a href="privacy.html" target="_blank" rel="noopener" data-i18n="footer.privacy"></a> ·
           <button id="btn-stats" class="linkbtn"></button>
         </div>
+      </div>
+
+      <div id="lobby-puzzles" class="hidden">
+        <button id="pz-daily" class="big puzzles"></button>
+        <div id="pz-grid" class="pz-grid"></div>
+        <button id="pz-back" class="ghost" data-i18n="pz.back"></button>
       </div>
 
       <div id="lobby-hosting" class="hidden">
@@ -245,6 +256,7 @@
   <script src="rules.js"></script>
   <script src="core.js"></script>
   <script src="tutorial.js"></script>
+  <script src="puzzles.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

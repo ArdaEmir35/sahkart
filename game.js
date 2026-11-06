@@ -24,7 +24,7 @@ const optionsFor = side => Core.optionsFor(S, side);
 function nameOf(side) {
   if (side === ME) return t('name.you');
   if (mode === 'bot') return t('name.bot', { level: t('level.' + botLevel) });
-  if (mode === 'tutorial') return t('name.botPlain');
+  if (mode === 'tutorial' || mode === 'puzzle') return t('name.botPlain');
   return t('name.opp');
 }
 
@@ -82,6 +82,11 @@ function doPlay(opt, color) {
     localAct(ME, { action: 'play', cardId: opt.card.id, move: opt.move, color });
     return Tutorial.advance();
   }
+  if (mode === 'puzzle') {
+    if (!Puzzles.active) return;
+    localAct(ME, { action: 'play', cardId: opt.card.id, move: opt.move, color });
+    return Puzzles.after();
+  }
   if (mode === 'online') {
     const m = opt.move;
     return sendAction({ action: 'play', cardId: opt.card.id, move: m && { fr: m.fr, fc: m.fc, tr: m.tr, tc: m.tc }, color });
@@ -90,7 +95,7 @@ function doPlay(opt, color) {
 }
 
 function doDrawOrPass() {
-  if (!canAct()) return;
+  if (!canAct() || mode === 'puzzle') return;
   if (mode === 'tutorial') {
     const type = S.drawn ? 'pass' : 'draw';
     const err = Tutorial.check({ type });
@@ -384,6 +389,8 @@ function logHtml(e) {
     case 'start': return t('log.start', { card: cardTag(p.card) });
     case 'reshuffle': return t('log.reshuffle');
     case 'lesson': return t('log.lesson', { n: p.n, title: t('tut.' + p.n + '.title') });
+    case 'puzzle': return t('log.puzzle', { n: p.n });
+    case 'oppPass': return t('log.oppPass');
     case 'play': {
       let h = name(e.s) + ': ' + cardTag(p.card);
       if (p.move) {
@@ -535,7 +542,7 @@ function render() {
   const toSet = new Set(ui.from ? selOpts.filter(o => o.move.fr === ui.from[0] && o.move.fc === ui.from[1]).map(o => o.move.tr * 8 + o.move.tc) : []);
   const targetZone = ui.card && ui.card.kind === 'piece' ? ui.card.color : null;
   const flip = ME === 1; // siyah oynayan kendi taşlarını altta görür
-  tutHint = mode === 'tutorial' ? Tutorial.hint() : {};
+  tutHint = mode === 'tutorial' ? Tutorial.hint() : mode === 'puzzle' ? Puzzles.hint() : {};
 
   // Tahta (değişmediyse yeniden çizme, yoksa taş animasyonu yarıda kesilir)
   const boardEl = $('#board');
@@ -576,15 +583,22 @@ function render() {
   ac.textContent = t('color.' + S.activeColor);
   $('#draw-btn').disabled = !active;
   $('#draw-btn').classList.toggle('hint', !!tutHint.deck);
-  $('#coach').classList.toggle('hidden', mode !== 'tutorial');
-  document.body.classList.toggle('tutorial', mode === 'tutorial');
+  const guided = mode === 'tutorial' || mode === 'puzzle';
+  $('#coach').classList.toggle('hidden', !guided);
+  $('#coach').classList.toggle('puzzle', mode === 'puzzle');
+  document.body.classList.toggle('tutorial', guided);
+  document.body.classList.toggle('puzzle-mode', mode === 'puzzle');
+  $('#coach-exit').textContent = mode === 'puzzle' ? t('pz.menu') : t('coach.exit');
+  ['#coach-hint', '#coach-retry'].forEach(sel => mode !== 'puzzle' && $(sel).classList.add('hidden'));
+  if (mode !== 'puzzle') $('#coach').classList.remove('fail');
   if (mode === 'tutorial') Tutorial.renderCoach();
+  if (mode === 'puzzle') { Puzzles.renderCoach(); $('#draw-btn').disabled = true; }
   $('#draw-label').textContent = S.turn === ME && S.drawn ? t('pile.pass') : t('pile.draw');
 
   // Durum
   const st = $('#status');
   if (!st.classList.contains('warn')) {
-    if (mode === 'tutorial') st.textContent = '';
+    if (guided) st.textContent = '';
     else if (S.over) st.textContent = S.winner === ME ? t('st.win') : t('st.won', { name: nameOf(S.winner) });
     else if (S.turn !== ME) st.textContent = mode === 'bot' ? t('st.botThinking') : t('st.oppTurn');
     else if (pending) st.textContent = t('st.sending');
@@ -598,9 +612,9 @@ function render() {
   $('#turn-opp').classList.toggle('on', S.turn === OPP && !S.over);
 
   // Pencereler: renk seçimi / oyun sonu
-  $('#overlay').classList.toggle('hidden', !modalOpen && (!S.over || mode === 'tutorial'));
+  $('#overlay').classList.toggle('hidden', !modalOpen && (!S.over || guided));
   $('#color-pick').classList.toggle('hidden', !modalOpen);
-  $('#result').classList.toggle('hidden', !S.over || modalOpen || mode === 'tutorial');
+  $('#result').classList.toggle('hidden', !S.over || modalOpen || guided);
   if (S.over) {
     $('#overlay-title').textContent = S.winner === ME ? t('end.win') : t('end.lose');
     const oppWants = mode === 'online' && serverMeta.rematch[1 - ME] && !rematchAsked;
@@ -637,7 +651,7 @@ function trackLifecycle() {
 // ---------- lobi ----------
 function lobbyView(v) {
   $('#lobby').classList.remove('hidden');
-  ['menu', 'hosting', 'joining', 'searching'].forEach(x => $('#lobby-' + x).classList.toggle('hidden', x !== v));
+  ['menu', 'hosting', 'joining', 'searching', 'puzzles'].forEach(x => $('#lobby-' + x).classList.toggle('hidden', x !== v));
 }
 function hideLobby() { $('#lobby').classList.add('hidden'); }
 function lobbyError(msg) {
@@ -653,6 +667,38 @@ function setNetStatus(text, ok) {
   el.className = 'net-status ' + (ok ? 'ok' : 'bad');
   el.classList.toggle('hidden', !text);
   $('#speed-wrap').classList.toggle('hidden', mode !== 'bot');
+}
+
+// ---------- bulmacalar ----------
+function showPuzzleList() {
+  if (mode === 'puzzle') Puzzles.stop();
+  S = null; mode = 'bot';
+  $('#coach').classList.add('hidden');
+  document.body.classList.remove('tutorial', 'puzzle-mode');
+  setNetStatus('');
+  lobbyView('puzzles');
+  renderPuzzleList();
+}
+function renderPuzzleList() {
+  const done = Puzzles.solved(), daily = Puzzles.dailyIndex();
+  $('#pz-daily').textContent = t('pz.daily') + ' · #' + (daily + 1) + (done.has(Puzzles.LIST[daily].id) ? ' ✓' : '');
+  const grid = $('#pz-grid');
+  grid.innerHTML = '';
+  Puzzles.LIST.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.className = 'pz-tile d' + p.d + (done.has(p.id) ? ' solved' : '');
+    b.innerHTML = '<b>' + (i + 1) + '</b><small>' + '★'.repeat(p.d) + '</small>';
+    b.title = t('pz.level.' + p.d) + (done.has(p.id) ? ' ✓' : '');
+    b.onclick = () => startPuzzle(i);
+    grid.appendChild(b);
+  });
+}
+function startPuzzle(i, daily = false) {
+  mode = 'puzzle'; ME = 0;
+  hideLobby();
+  setNetStatus('');
+  Analytics.track('puzzle_start', { id: Puzzles.LIST[i].id, daily });
+  Puzzles.load(i);
 }
 
 function startTutorial() {
@@ -777,6 +823,7 @@ $('#draw-btn').onclick = doDrawOrPass;
 $('#again').onclick = doRematch;
 $('#new-game').onclick = () => {
   if (mode === 'tutorial') return showMenu();
+  if (mode === 'puzzle') return showPuzzleList();
   if (mode === 'bot') return S && !S.over && S.log.length > 2 && !confirm(t('confirm.newGame')) ? null : showMenu();
   if (S && S.over) return leaveOnline();
   if (confirm(t('confirm.leave'))) leaveOnline();
@@ -826,8 +873,13 @@ applyLanguage();
 $('#rules-btn').onclick = () => $('#rules').classList.toggle('hidden');
 $('#btn-bot').onclick = startBotGame;
 $('#btn-tutorial').onclick = startTutorial;
-$('#coach-next').onclick = () => Tutorial.next();
-$('#coach-exit').onclick = showMenu;
+$('#coach-next').onclick = () => (mode === 'puzzle' ? Puzzles.next() : Tutorial.next());
+$('#coach-exit').onclick = () => (mode === 'puzzle' ? showPuzzleList() : showMenu());
+$('#coach-hint').onclick = () => Puzzles.askHint();
+$('#coach-retry').onclick = () => Puzzles.retry();
+$('#btn-puzzles').onclick = () => { Analytics.track('puzzles_open'); showPuzzleList(); };
+$('#pz-back').onclick = showMenu;
+$('#pz-daily').onclick = () => startPuzzle(Puzzles.dailyIndex(), true);
 $('#btn-host').onclick = hostRoom;
 $('#btn-join').onclick = () => joinRoom($('#join-code').value);
 $('#join-code').onkeydown = e => { if (e.key === 'Enter') joinRoom(e.target.value); };
@@ -854,12 +906,13 @@ document.addEventListener('keydown', e => {
 function showMenu() {
   if (S && !S.over && (mode === 'bot' || mode === 'online')) Analytics.track('game_abandon', { mode: gameKind(), moves: S.moveNo });
   if (mode === 'tutorial') Analytics.track('tutorial_exit', { lesson: Tutorial.lessonNo });
+  if (mode === 'puzzle') Puzzles.stop();
   S = null; // arkadaki oyunu durdur (bot ve saat)
   $('#chat-pop').classList.add('hidden');
   $('#chat-btn').classList.add('hidden');
   mode = 'bot';
   $('#coach').classList.add('hidden');
-  document.body.classList.remove('tutorial');
+  document.body.classList.remove('tutorial', 'puzzle-mode');
   $('#btn-tutorial').classList.toggle('new', !Tutorial.isDone());
   $('#btn-resume').classList.toggle('hidden', !Online.storedSession());
   setNetStatus('');
@@ -1004,7 +1057,7 @@ $('#chat-form').onsubmit = e => {
   $('#chat-input').value = '';
   sendChat('text', v);
 };
-I18N.onChange(() => { buildChatButtons(); renderChat(); });
+I18N.onChange(() => { buildChatButtons(); renderChat(); if (!$('#lobby-puzzles').classList.contains('hidden')) renderPuzzleList(); });
 buildChatButtons();
 
 // ---------- mobil düzen: ortadaki kart ve deste, telefonda elin hemen üstüne taşınır ----------
