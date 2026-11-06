@@ -21,6 +21,7 @@
     <div class="header-right">
       <select id="lang-sel" class="lang-sel" data-i18n-aria="hdr.lang"><option value="en">EN</option><option value="tr">TR</option></select>
       <button id="sound-btn" class="ghost icon">🔊</button>
+      <button id="feedback-btn" class="ghost icon" data-i18n-title="hdr.feedback">💬</button>
       <button id="rules-btn" class="ghost" data-i18n="hdr.rules">Rules</button>
       <span id="net-status" class="net-status hidden"></span>
       <label id="speed-wrap"><span class="speed-lbl" data-i18n="hdr.speed">Bot speed</span>
@@ -162,6 +163,11 @@
         <p id="lobby-error" class="err"></p>
         <button id="btn-install" class="ghost install hidden" data-i18n="lobby.install"></button>
         <p id="ios-install" class="install-tip hidden" data-i18n-html="lobby.ios"></p>
+        <div class="lobby-foot">
+          <button id="btn-feedback" class="linkbtn" data-i18n="footer.feedback"></button> ·
+          <a href="privacy.html" target="_blank" rel="noopener" data-i18n="footer.privacy"></a> ·
+          <button id="btn-stats" class="linkbtn"></button>
+        </div>
       </div>
 
       <div id="lobby-hosting" class="hidden">
@@ -189,8 +195,32 @@
     </div>
   </div>
 
+  <div id="fb" class="fb-wrap hidden">
+    <div class="modal fb">
+      <h3 data-i18n="fb.title"></h3>
+      <p class="sub" data-i18n="fb.sub"></p>
+      <textarea id="fb-msg" maxlength="2000" rows="5" data-i18n-ph="fb.ph"></textarea>
+      <input id="fb-contact" maxlength="200" type="email" autocomplete="email" data-i18n-ph="fb.contact">
+      <p id="fb-note" class="err"></p>
+      <div class="fb-btns">
+        <button id="fb-cancel" class="ghost" data-i18n="fb.cancel"></button>
+        <button id="fb-send" data-i18n="fb.send"></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="consent" class="consent hidden" role="dialog">
+    <p data-i18n-html="consent.text"></p>
+    <div class="consent-btns">
+      <a href="privacy.html" target="_blank" rel="noopener" data-i18n="consent.more"></a>
+      <button id="consent-no" class="ghost" data-i18n="consent.no"></button>
+      <button id="consent-yes" data-i18n="consent.yes"></button>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"></script>
   <script src="i18n.js"></script>
+  <script src="analytics.js"></script>
   <script src="online.js"></script>
   <script src="sound.js"></script>
   <script src="rules.js"></script>

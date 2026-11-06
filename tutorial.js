@@ -127,7 +127,11 @@ const Tutorial = (() => {
     step++;
     if (step >= lesson.steps.length) {
       finished = true;
-      if (index === LESSONS.length - 1) localStorage.setItem('sahkart-tutorial', 'done');
+      Analytics.track('tutorial_lesson', { lesson: index + 1 });
+      if (index === LESSONS.length - 1) {
+        localStorage.setItem('sahkart-tutorial', 'done');
+        Analytics.track('tutorial_done');
+      }
     }
     render();
   }
@@ -163,5 +167,5 @@ const Tutorial = (() => {
 
   const isDone = () => localStorage.getItem('sahkart-tutorial') === 'done';
 
-  return { start, check, advance, hint, renderCoach, next, isDone };
+  return { start, check, advance, hint, renderCoach, next, isDone, get lessonNo() { return lesson ? index + 1 : 0; } };
 })();

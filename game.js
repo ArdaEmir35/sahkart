@@ -103,6 +103,7 @@ function doDrawOrPass() {
 }
 
 function doRematch() {
+  Analytics.track('rematch', { mode: gameKind() });
   if (mode === 'online') return sendAction({ action: 'rematch' });
   newGame();
 }
@@ -125,7 +126,11 @@ function onServer(p) {
   serverMeta = { status: p.status, rematch: p.rematch || [false, false] };
   if (p.status === 'cancelled') { Online.leave(); return lobbyError(t('err.cancelled')); }
   if (!p.view) return; // rakip bekleniyor
-  if (mode !== 'online') { mode = 'online'; ME = Online.session.side; S = null; hideLobby(); }
+  if (mode !== 'online') {
+    mode = 'online'; ME = Online.session.side; S = null; hideLobby();
+    if (waitStartAt) Analytics.track('matched', { mode: gameKind(), wait_s: Math.round((Date.now() - waitStartAt) / 1000) });
+    waitStartAt = 0;
+  }
   const v = p.view;
   const turnChanged = !S || S.gameId !== v.gameId || S.turn !== v.turn || S.over !== v.over;
   S = v;
@@ -605,8 +610,27 @@ function render() {
     $('#again').disabled = rematchAsked;
   }
   $('#resign-btn').classList.toggle('hidden', mode !== 'online' || S.over);
+  trackLifecycle();
   renderLog();
   updateClocks();
+}
+
+// ---------- istatistik: oyun başı / sonu ----------
+let trackedStart = '', trackedEnd = '', gameStartAt = 0, waitStartAt = 0;
+const gameKind = () => (mode === 'bot' ? 'bot' : Online.session && Online.session.id.length === 4 ? 'room' : 'quick');
+const gameTC = () => (S.clock ? S.clock.base / 1000 + '+' + S.clock.inc / 1000 : '0');
+function trackLifecycle() {
+  if (!S || (mode !== 'bot' && mode !== 'online')) return;
+  const props = { mode: gameKind(), level: mode === 'bot' ? botLevel : undefined, tc: gameTC() };
+  if (trackedStart !== S.gameId) {
+    trackedStart = S.gameId;
+    gameStartAt = Date.now();
+    if (!S.over) Analytics.track('game_start', { ...props, resumed: S.moveNo > 0 });
+  }
+  if (S.over && trackedEnd !== S.gameId) {
+    trackedEnd = S.gameId;
+    Analytics.track('game_end', { ...props, result: S.winner === ME ? 'win' : 'lose', reason: S.reason, moves: S.moveNo, secs: Math.round((Date.now() - gameStartAt) / 1000) });
+  }
 }
 
 // ---------- lobi ----------
@@ -630,6 +654,7 @@ function setNetStatus(text, ok) {
 }
 
 function startTutorial() {
+  Analytics.track('tutorial_start', { done_before: Tutorial.isDone() });
   mode = 'tutorial'; ME = 0;
   hideLobby();
   setNetStatus('');
@@ -680,6 +705,8 @@ async function hostRoom() {
   showHosting('');
   const res = await Online.call({ action: 'create', tc: timeControl });
   if (res.error) return lobbyError(errText(res.error));
+  Analytics.track('room_create', { tc: timeControl });
+  waitStartAt = Date.now();
   showHosting(res.id);
   startSession(res);
 }
@@ -694,6 +721,7 @@ async function joinRoom(code) {
   lobbyView('joining');
   $('#joining-msg').innerHTML = t('lobby.joining', { code });
   const res = await Online.call({ action: 'join', code });
+  Analytics.track(res.error ? 'room_join_fail' : 'room_join', res.error ? { err: res.error } : {});
   if (res.error) return lobbyError(errText(res.error));
   startSession(res);
 }
@@ -703,12 +731,15 @@ async function quickMatch() {
   Online.leave();
   lobbyView('searching');
   $('#search-tc').textContent = tcSel.options[tcSel.selectedIndex].text;
+  waitStartAt = Date.now();
+  Analytics.track('quick_search', { tc: timeControl });
   const res = await Online.call({ action: 'quick', tc: timeControl });
   if (res.error) return lobbyError(errText(res.error));
   startSession(res);
 }
 
 async function cancelWaiting() {
+  if (Online.session) Analytics.track(Online.session.id.length === 4 ? 'room_cancel' : 'quick_cancel', { wait_s: Math.round((Date.now() - waitStartAt) / 1000) });
   if (Online.session) Online.call({ action: 'cancel' });
   Online.leave();
   lobbyError('');
@@ -777,7 +808,7 @@ function applyLanguage() {
   lastBoardKey = '';
   render();
 }
-['#lang-sel', '#lang-sel-lobby'].forEach(sel => ($(sel).onchange = e => I18N.set(e.target.value)));
+['#lang-sel', '#lang-sel-lobby'].forEach(sel => ($(sel).onchange = e => { I18N.set(e.target.value); Analytics.track('lang_change', { lang: e.target.value }); }));
 I18N.onChange(applyLanguage);
 
 const tcSel = $('#time-ctrl');
@@ -817,6 +848,8 @@ document.addEventListener('keydown', e => {
 });
 
 function showMenu() {
+  if (S && !S.over && (mode === 'bot' || mode === 'online')) Analytics.track('game_abandon', { mode: gameKind(), moves: S.moveNo });
+  if (mode === 'tutorial') Analytics.track('tutorial_exit', { lesson: Tutorial.lessonNo });
   S = null; // arkadaki oyunu durdur (bot ve saat)
   mode = 'bot';
   $('#coach').classList.add('hidden');
@@ -827,6 +860,41 @@ function showMenu() {
   lobbyView('menu');
   $('#lobby-error').textContent = '';
 }
+
+// ---------- geri bildirim ve istatistik izni ----------
+function openFeedback() {
+  $('#fb').classList.remove('hidden');
+  $('#fb-note').textContent = '';
+  $('#fb-note').className = 'err';
+  $('#fb-send').disabled = false;
+  setTimeout(() => $('#fb-msg').focus(), 50);
+}
+$('#feedback-btn').onclick = $('#btn-feedback').onclick = openFeedback;
+$('#fb-cancel').onclick = () => $('#fb').classList.add('hidden');
+$('#fb-send').onclick = async () => {
+  const msg = $('#fb-msg').value.trim();
+  if (!msg) return ($('#fb-note').textContent = t('fb.empty'));
+  $('#fb-send').disabled = true;
+  const ok = await Analytics.feedback(msg, $('#fb-contact').value.trim(), { mode, moves: S ? S.moveNo : null });
+  $('#fb-send').disabled = false;
+  $('#fb-note').textContent = ok ? t('fb.thanks') : t('fb.fail');
+  $('#fb-note').className = ok ? 'err ok' : 'err';
+  if (ok) {
+    $('#fb-msg').value = '';
+    Analytics.track('feedback_sent');
+    setTimeout(() => $('#fb').classList.add('hidden'), 1400);
+  }
+};
+
+function showConsent() {
+  $('#consent').classList.toggle('hidden', Analytics.consent() !== null);
+  $('#btn-stats').textContent = t('footer.stats', { state: t(Analytics.consent() === 'yes' ? 'footer.on' : 'footer.off') });
+}
+$('#consent-yes').onclick = () => { Analytics.setConsent(true); showConsent(); };
+$('#consent-no').onclick = () => { Analytics.setConsent(false); showConsent(); };
+$('#btn-stats').onclick = () => { Analytics.setConsent(Analytics.consent() !== 'yes'); showConsent(); };
+I18N.onChange(showConsent);
+showConsent();
 
 // ---------- mobil düzen: ortadaki kart ve deste, telefonda elin hemen üstüne taşınır ----------
 const narrow = matchMedia('(max-width: 700px)');
@@ -851,7 +919,8 @@ window.addEventListener('beforeinstallprompt', e => {
 $('#btn-install').onclick = async () => {
   if (!installPrompt) return;
   installPrompt.prompt();
-  await installPrompt.userChoice;
+  const choice = await installPrompt.userChoice;
+  Analytics.track('install', { outcome: choice && choice.outcome });
   installPrompt = null;
   $('#btn-install').classList.add('hidden');
 };

@@ -248,3 +248,20 @@ button, .sq, .card, select { touch-action: manipulation; }
   aside { height: 260px; }
 }
 @media (max-width: 380px) { h1 { font-size: 15px; } .header-right button.ghost { padding: 4px 6px; } }
+
+/* Geri bildirim, izin, alt bilgi */
+.lobby-foot { margin-top: 16px; font-size: 13px; color: #6f8095; }
+.lobby-foot a, .linkbtn { color: #9fb0c3; text-decoration: none; background: none; border: none; padding: 0; font-size: 13px; cursor: pointer; }
+.lobby-foot a:hover, .linkbtn:hover { color: #ffd166; }
+.fb-wrap { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 40; padding: 12px; }
+.modal.fb { width: min(440px, 100%); text-align: left; }
+.modal.fb textarea, .modal.fb input { width: 100%; margin-top: 8px; background: #0d1520; color: inherit; border: 1px solid #ffffff30; border-radius: 8px; padding: 10px; font: inherit; resize: vertical; }
+.fb-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.fb-btns button, .consent-btns button { padding: 8px 16px; font-weight: 700; }
+#fb-send, #consent-yes { background: #ffd166; color: #1a1a1a; }
+#fb-note.ok { color: #7ee2a0; }
+.consent { position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(560px, calc(100% - 24px)); z-index: 35;
+  background: #1b2230; border: 1px solid #ffffff2a; border-radius: 12px; padding: 12px 16px; box-shadow: 0 12px 40px #000c; font-size: 14px; }
+.consent p { margin: 0 0 10px; line-height: 1.45; }
+.consent-btns { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.consent-btns a { color: #9fb0c3; margin-right: auto; font-size: 13px; }
