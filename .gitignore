@@ -1,2 +1,6 @@
 .claude/
 .DS_Store
+node_modules/
+www/
+ios/build/
+ios/App/App/public/

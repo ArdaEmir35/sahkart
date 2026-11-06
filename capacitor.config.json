@@ -1,0 +1,26 @@
+{
+  "appId": "com.ardaemir.chromate",
+  "appName": "Chromate",
+  "webDir": "www",
+  "backgroundColor": "#12161f",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#12161f",
+    "scheme": "Chromate"
+  },
+  "android": {
+    "backgroundColor": "#12161f"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 500,
+      "launchAutoHide": true,
+      "backgroundColor": "#12161f",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "overlaysWebView": true
+    }
+  }
+}

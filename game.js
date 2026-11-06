@@ -15,6 +15,11 @@ let recvAt = 0;        // online: son durumun geldiği an (saat hesabı için)
 let timeControl = localStorage.getItem('sahkart-tc') || '300+3';
 
 const $ = s => document.querySelector(s);
+// Mağaza uygulaması mı (Capacitor) yoksa web mi?
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+// Davet linkleri her zaman web adresini göstermeli (uygulamanın içi capacitor://localhost'tur)
+const WEB_URL = 'https://ardaemir35.github.io/sahkart/';
+const shareBase = () => (location.protocol.startsWith('http') && !NATIVE ? location.origin + location.pathname : WEB_URL);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const isWhite = side => side === 0;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -746,7 +751,7 @@ function startSession(res) {
 function showHosting(code) {
   lobbyView('hosting');
   $('#room-code').textContent = code || '····';
-  $('#room-link').value = code ? location.origin + location.pathname + '?oda=' + code : '';
+  $('#room-link').value = code ? shareBase() + '?oda=' + code : '';
 }
 
 async function hostRoom() {
@@ -893,11 +898,16 @@ $('#resign-btn').onclick = () => {
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && mode === 'online') Online.poll(); // telefona geri dönünce hemen tazele
 });
-$('#copy-link').onclick = () => {
-  navigator.clipboard.writeText($('#room-link').value).then(() => {
-    $('#copy-link').textContent = t('lobby.copied');
-    setTimeout(() => ($('#copy-link').textContent = t('lobby.copy')), 1500);
-  });
+// Telefonda sistemin paylaşım menüsünü (WhatsApp, Mesajlar…) aç; yoksa panoya kopyala
+$('#copy-link').onclick = async () => {
+  const url = $('#room-link').value;
+  if (!url) return;
+  if (navigator.share && (NATIVE || matchMedia('(pointer: coarse)').matches)) {
+    try { await navigator.share({ title: t('brand'), text: t('lobby.shareText'), url }); return; } catch (_) { /* iptal edildi */ }
+  }
+  try { await navigator.clipboard.writeText(url); } catch (_) { $('#room-link').select(); document.execCommand('copy'); }
+  $('#copy-link').textContent = t('lobby.copied');
+  setTimeout(() => ($('#copy-link').textContent = t('lobby.copy')), 1500);
 };
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && ui.card && !modalOpen) { ui = { card: null, from: null }; render(); }
@@ -1071,7 +1081,7 @@ narrow.addEventListener('change', placeTableCenter);
 placeTableCenter();
 
 // ---------- PWA: çevrimdışı önbellek ve yükleme ----------
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+if (!NATIVE && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 let installPrompt = null;
@@ -1090,7 +1100,11 @@ $('#btn-install').onclick = async () => {
 };
 const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-if (isIOS && !standalone) $('#ios-install').classList.remove('hidden');
+if (isIOS && !standalone && !NATIVE) $('#ios-install').classList.remove('hidden');
+// Uygulamada: koyu tema için açık renkli durum çubuğu yazıları
+if (NATIVE && Capacitor.Plugins.StatusBar) Capacitor.Plugins.StatusBar.setStyle({ style: 'DARK' }).catch(() => {});
+// Uygulamada gizlilik sayfası aynı pencerede açılsın (yeni sekme yok)
+if (NATIVE) document.querySelectorAll('a[target="_blank"]').forEach(a => a.removeAttribute('target'));
 
 // Başlangıç: link ?oda=KOD içeriyorsa direkt katıl, yoksa menüyü göster
 const linkCode = new URLSearchParams(location.search).get('oda');

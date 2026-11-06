@@ -15,7 +15,6 @@ h1 small { font-weight: 400; font-size: 13px; color: #8fa0b4; margin-left: 6px; 
 select { margin-left: 6px; background: #1b2533; color: inherit; border: 1px solid #ffffff2a; border-radius: 6px; padding: 4px 6px; }
 button { font: inherit; cursor: pointer; border: none; border-radius: 8px; color: inherit; }
 button.ghost { background: transparent; border: 1px solid #ffffff40; padding: 6px 12px; }
-button.ghost:hover { background: #ffffff12; }
 .hidden { display: none !important; }
 
 #rules { max-width: 900px; margin: 14px auto 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 20px 10px; font-size: 14px; line-height: 1.6; }
@@ -78,7 +77,6 @@ aside h2 { margin: 14px 0 6px; font-size: 13px; color: #9fb0c3; text-transform: 
 .hand.small .card:first-child { margin-left: 0; }
 #my-hand .card { cursor: pointer; }
 .card.playable { box-shadow: 0 0 0 2px #fff, 0 0 16px #fff8; transform: translateY(-4px); }
-.card.playable:hover { transform: translateY(-10px); }
 .card.selected { box-shadow: 0 0 0 3px #ffd166, 0 0 22px #ffd166; transform: translateY(-14px); }
 .card.dim { opacity: .45; }
 
@@ -92,7 +90,6 @@ aside h2 { margin: 14px 0 6px; font-size: 13px; color: #9fb0c3; text-transform: 
 #pile .card { width: 76px; height: 110px; } #pile .card .sym { font-size: 44px; }
 .deck-btn { background: none; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: #ffd166; }
 .deck-btn .card { width: 76px; height: 110px; }
-.deck-btn:not(:disabled):hover .card { transform: translateY(-4px); box-shadow: 0 0 16px #ffd16688; }
 .deck-btn:disabled { opacity: .5; cursor: default; }
 .active-row { margin-top: 12px; text-align: center; font-size: 14px; }
 .active-color { display: inline-block; padding: 2px 12px; border-radius: 12px; font-weight: 700; margin-left: 4px; }
@@ -113,7 +110,6 @@ aside h2 { margin: 14px 0 6px; font-size: 13px; color: #9fb0c3; text-transform: 
 .modal h3 { margin: 0 0 14px; font-size: 22px; }
 .colors { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .colors button { padding: 18px 26px; font-weight: 700; font-size: 16px; }
-.colors button:hover { filter: brightness(1.15); }
 button.c0 { background: var(--c0); } button.c1 { background: var(--c1); } button.c2 { background: var(--c2); } button.c3 { background: var(--c3); color: #222; }
 #again { background: #ffd166; color: #1a1a1a; font-weight: 700; padding: 10px 26px; font-size: 16px; }
 
@@ -131,7 +127,6 @@ button.c0 { background: var(--c0); } button.c1 { background: var(--c1); } button
 .lobby .sub { color: #8fa0b4; font-size: 14px; margin: 4px 0 14px; }
 .lobby button.big { width: 100%; padding: 13px; font-size: 16px; font-weight: 700; background: #ffd166; color: #1a1a1a; margin-top: 6px; }
 .lobby button.alt { background: #2f7dd1; color: #fff; }
-.lobby button:hover { filter: brightness(1.1); }
 .lobby .sep { margin: 18px 0 4px; font-size: 12px; color: #8fa0b4; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
 .lobby .sep::before, .lobby .sep::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .join-row { display: flex; gap: 8px; margin-top: 6px; }
@@ -217,7 +212,6 @@ body.tutorial .board-wrap { --sq: min(58px, calc((100vh - 480px) / 8), calc((100
 .lobby button.quick { background: #e04050; color: #fff; }
 .lobby button.resume { background: #ffffff14; border: 1px solid #ffd166; color: #ffd166; margin: 0 0 10px; }
 button.ghost.danger { border-color: #ff8a8a88; color: #ff9a9a; }
-button.ghost.danger:hover { background: #ff8a8a18; }
 
 /* Dil seçimi */
 .lang-sel { margin: 0; padding: 5px 6px; font-weight: 700; }
@@ -226,7 +220,7 @@ button.ghost.danger:hover { background: #ff8a8a18; }
 
 /* Mobil: çentik/ana ekran çubuğu güvenli alanları, çift dokunmada yakınlaştırma yok */
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-button, .sq, .card, select { touch-action: manipulation; }
+html, body, button, .sq, .card, select { touch-action: manipulation; }
 .sq, .card, .hand, #board { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 
 @media (max-width: 700px) {
@@ -252,7 +246,6 @@ button, .sq, .card, select { touch-action: manipulation; }
 /* Geri bildirim, izin, alt bilgi */
 .lobby-foot { margin-top: 16px; font-size: 13px; color: #6f8095; }
 .lobby-foot a, .linkbtn { color: #9fb0c3; text-decoration: none; background: none; border: none; padding: 0; font-size: 13px; cursor: pointer; }
-.lobby-foot a:hover, .linkbtn:hover { color: #ffd166; }
 .fb-wrap { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 40; padding: 12px; }
 .modal.fb { width: min(440px, 100%); text-align: left; }
 .modal.fb textarea, .modal.fb input { width: 100%; margin-top: 8px; background: #0d1520; color: inherit; border: 1px solid #ffffff30; border-radius: 8px; padding: 10px; font: inherit; resize: vertical; }
@@ -269,7 +262,6 @@ button, .sq, .card, select { touch-action: manipulation; }
 /* Sohbet */
 .who { position: relative; }
 .chat-btn { position: relative; background: #ffffff12; border: 1px solid #ffffff2a; border-radius: 20px; padding: 3px 10px; font-size: 15px; }
-.chat-btn:hover { background: #ffffff22; }
 .badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #e04050; color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; }
 .bubble { position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); z-index: 6; white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis;
   background: #f2f4f7; color: #12161f; font-weight: 700; font-size: 14px; padding: 6px 12px; border-radius: 14px; box-shadow: 0 6px 18px #0008; animation: pop .2s ease-out; pointer-events: none; }
@@ -284,7 +276,6 @@ button, .sq, .card, select { touch-action: manipulation; }
 .chat-empty { color: #6f8095; margin: 4px 0; }
 .chat-phrases { display: flex; flex-wrap: wrap; gap: 5px; }
 .chat-phrases button { background: #ffffff10; border: 1px solid #ffffff22; border-radius: 14px; padding: 5px 10px; font-size: 13px; }
-.chat-phrases button:hover, .chat-emojis button:hover { background: #ffffff24; }
 .chat-emojis { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 6px; }
 .chat-emojis button { background: none; font-size: 22px; padding: 2px 4px; border-radius: 8px; }
 .chat-form { display: flex; gap: 6px; margin-top: 8px; }
@@ -304,7 +295,6 @@ button, .sq, .card, select { touch-action: manipulation; }
 .pz-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 12px 0; max-height: 46vh; overflow-y: auto; }
 .pz-tile { display: flex; flex-direction: column; align-items: center; padding: 6px 0; background: #0d1520; border: 1px solid #ffffff22; border-radius: 8px; line-height: 1.1; }
 .pz-tile b { font-size: 16px; } .pz-tile small { font-size: 9px; color: #ffd166; letter-spacing: -1px; }
-.pz-tile:hover { border-color: #ffd166; }
 .pz-tile.solved { background: #18302a; border-color: #7ee2a0aa; }
 .pz-tile.solved b::after { content: ' ✓'; color: #7ee2a0; font-size: 12px; }
 #coach.fail { border-color: #ff8a8a99; background: #301b20; }
@@ -320,3 +310,30 @@ body.puzzle-mode .pile-box:has(#draw-btn) { display: none; }
   body.tutorial #coach-text { margin: 4px 0 6px; font-size: 14px; }
   body.tutorial .coach-btns button { padding: 5px 10px; font-size: 13px; }
 }
+
+/* Telefon: her şey tek ekrana sığsın (çentik ve alt çubuk dahil) */
+@media (max-width: 700px) {
+  .hand-row.opp-row { flex-direction: row; justify-content: center; gap: 10px; }
+  .opp-row .who { flex-direction: column; gap: 4px; }
+  .board-wrap { --sq: min(calc((100vw - 32px) / 8), max(36px, calc((100dvh - 500px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 8))); }
+  .header-right button { white-space: nowrap; }
+}
+@media (max-width: 440px) { #speed-wrap { display: none !important; } }
+
+/* Fareyle üzerine gelme efektleri sadece fare olan cihazlarda: iOS'ta ilk dokunuşun "hover" sayılıp tıklamayı yutmasını önler */
+@media (hover: hover) and (pointer: fine) {
+  button.ghost:hover { background: #ffffff12; }
+  .card.playable:hover { transform: translateY(-10px); }
+  .deck-btn:not(:disabled):hover .card { transform: translateY(-4px); box-shadow: 0 0 16px #ffd16688; }
+  .colors button:hover { filter: brightness(1.15); }
+  .lobby button:hover { filter: brightness(1.1); }
+  button.ghost.danger:hover { background: #ff8a8a18; }
+  .lobby-foot a:hover, .linkbtn:hover { color: #ffd166; }
+  .chat-btn:hover { background: #ffffff22; }
+  .chat-phrases button:hover, .chat-emojis button:hover { background: #ffffff24; }
+  .pz-tile:hover { border-color: #ffd166; }
+}
+
+/* iOS: kartın/karenin içindeki öğeler dokunuşu yutmasın; tıklama doğrudan karta/kareye gitsin */
+.card > *, .sq > .piece, .deck-btn > *, .pz-tile > *, .chat-btn > * { pointer-events: none; }
+.sq, .card { cursor: pointer; }
