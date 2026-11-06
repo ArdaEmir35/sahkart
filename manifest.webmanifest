@@ -1,18 +1,35 @@
 {
-  "name": "Şahkart — Kartlı Satranç",
-  "short_name": "Şahkart",
-  "description": "Satranç tahtası, renkli kartlar. Bota karşı ya da arkadaşınla online oyna.",
-  "lang": "tr",
+  "name": "Chromate — Chess with Cards",
+  "short_name": "Chromate",
+  "description": "A chess board and colorful cards. Play against the bot or online with friends.",
+  "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#12161f",
   "theme_color": "#12161f",
-  "categories": ["games"],
+  "categories": [
+    "games"
+  ],
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

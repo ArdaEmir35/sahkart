@@ -1,7 +1,5 @@
-// Şahkart kuralları: tahta, taş hamleleri, deste ve kart eşleştirme
+// Şahkart / Chromate kuralları: tahta, taş hamleleri, deste ve kart eşleştirme (dilden bağımsız)
 const Rules = (() => {
-  const COLOR_NAMES = ['Kırmızı', 'Mavi', 'Yeşil', 'Sarı'];
-  const PIECE_NAMES = { p: 'Piyon', n: 'At', b: 'Fil', r: 'Kale', q: 'Vezir', k: 'Şah' };
   const GLYPH = { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚' };
   const VALUE = { p: 1, n: 3, b: 3.2, r: 5, q: 9, k: 100 };
   const FILES = 'abcdefgh';
@@ -161,17 +159,9 @@ const Rules = (() => {
     return hand.flatMap(card => cardOptions(b, white, card, top, activeColor));
   }
 
-  function cardLabel(card) {
-    if (card.kind === 'wild') return 'Joker';
-    const col = COLOR_NAMES[card.color];
-    if (card.kind === 'skip') return col + ' Atla';
-    if (card.kind === 'draw2') return col + ' +2';
-    return col + ' ' + PIECE_NAMES[card.piece];
-  }
-
   return {
-    COLOR_NAMES, PIECE_NAMES, GLYPH, VALUE, zone, sqName,
+    GLYPH, VALUE, zone, sqName,
     initialBoard, cloneBoard, pieceMoves, sideMoves, minAttacker, findKing, applyMove,
-    buildDeck, shuffle, sym, matches, cardOptions, zoneBonus, allOptions, cardLabel,
+    buildDeck, shuffle, sym, matches, cardOptions, zoneBonus, allOptions,
   };
 })();

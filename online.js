@@ -26,7 +26,7 @@ const Online = (() => {
       });
       return await res.json();
     } catch (e) {
-      return { error: 'Sunucuya ulaşılamadı. İnternet bağlantını kontrol et.', network: true };
+      return { error: 'network' };
     }
   }
 

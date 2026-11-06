@@ -1,0 +1,445 @@
+// Dil desteği: Türkçe (Şahkart) ve İngilizce (Chromate).
+// HTML'de data-i18n="anahtar" (metin), data-i18n-html (HTML), data-i18n-ph (placeholder),
+// data-i18n-title (ipucu) öznitelikleriyle; JS'te t('anahtar', {parametre}) ile kullanılır.
+const I18N = (() => {
+  const DICT = {
+    tr: {
+      brand: 'Şahkart',
+      tagline: 'kartlı satranç',
+      'doc.title': 'Şahkart — Kartlı Satranç',
+      'doc.desc': 'Şahkart: satranç tahtası, renkli kartlar. Bota karşı ya da arkadaşınla online oyna.',
+      'lobby.sub': 'Satranç tahtası, renkli kartlar.',
+
+      // üst çubuk
+      'hdr.rules': 'Kurallar',
+      'hdr.speed': 'Bot hızı',
+      'speed.slow': 'Yavaş', 'speed.normal': 'Normal', 'speed.fast': 'Hızlı',
+      'hdr.resign': '🏳 Pes et',
+      'hdr.new': 'Yeni Oyun',
+      'hdr.lang': 'Dil',
+      'sound.off': 'Sesi kapat', 'sound.on': 'Sesi aç',
+
+      // kurallar
+      'rules.title': 'Nasıl oynanır?',
+      'rules.1': 'Hamle yapmak için kart oynarsın. Kart, ortadaki kartla <b>aynı renkte</b> ya da <b>aynı sembolde</b> olmalı.',
+      'rules.2': '<b>Taş kartı</b>: Kartın gösterdiği taşı oynatırsın.',
+      'rules.3': '<b>Renk bonusu</b>: Taşı kartın <b>rengindeki şeride</b> götürürsen (a–b kırmızı, c–d mavi, e–f yeşil, g–h sarı) rakip 1 kart çeker.',
+      'rules.4': '<b>⏭ Atla</b>: Rakibin sırası atlanır, sen tekrar oynarsın.',
+      'rules.5': '<b>+2</b>: Rakip 2 kart çeker.',
+      'rules.6': '<b>★ Joker</b>: Her zaman oynanabilir. İstediğin taşı istediğin yere oynatır, sonra yeni rengi seçersin.',
+      'rules.7': 'Oynanabilir kartın yoksa (ya da istemezsen) desteden 1 kart çekersin. Çektiğin kart oynanabiliyorsa hemen oynayabilirsin, yoksa sıra geçer.',
+      'rules.8': '<b>Kazanmak için</b> rakibin şahını al ya da elindeki tüm kartları bitir. Şah çekme kuralı yoktur, şahını korumak sana kalmış!',
+      'rules.9': 'Rok ve geçerken alma yok. Son sıraya ulaşan piyon vezir olur.',
+      'rules.10': '<b>Süre</b>: Süreli oyunda sıra sendeyken saatin akar. Her hamleden sonra (varsa) artış süresi eklenir. Süresi biten kaybeder.',
+
+      // oyun alanı
+      'coach.exit': 'Eğitimden çık',
+      'coach.next': 'Devam →',
+      'coach.play': 'Bota karşı oyna 🤖',
+      'coach.step': 'Ders {n}/{total} · {title}',
+      'pile.top': 'Ortadaki kart',
+      'pile.deck': 'Deste ({n})',
+      'pile.draw': 'Kart çek',
+      'pile.pass': 'Pas geç',
+      'active.color': 'Geçerli renk:',
+      'log.title': 'Hamle geçmişi',
+      'color.pick': 'Yeni rengi seç',
+      'again': 'Tekrar Oyna',
+      'again.wait': 'Rakip bekleniyor…',
+      'cards.count': '{name} · {n} kart',
+
+      // isimler
+      'name.you': 'Sen',
+      'name.bot': 'Bot ({level})',
+      'name.botPlain': 'Bot',
+      'name.opp': 'Rakip',
+      'level.easy': 'Kolay', 'level.normal': 'Orta', 'level.hard': 'Zor',
+
+      // renkler ve taşlar
+      'color.0': 'Kırmızı', 'color.1': 'Mavi', 'color.2': 'Yeşil', 'color.3': 'Sarı',
+      'piece.p': 'Piyon', 'piece.n': 'At', 'piece.b': 'Fil', 'piece.r': 'Kale', 'piece.q': 'Vezir', 'piece.k': 'Şah',
+      'card.skip': 'Atla', 'card.draw2': 'Çek 2', 'card.wild': 'Joker',
+      'label.skip': '{color} Atla', 'label.draw2': '{color} +2', 'label.piece': '{color} {piece}',
+
+      // durum satırı
+      'st.win': 'Kazandın!',
+      'st.won': '{name} kazandı.',
+      'st.botThinking': 'Bot düşünüyor…',
+      'st.oppTurn': 'Rakibin sırası…',
+      'st.sending': 'Gönderiliyor…',
+      'st.drawn': 'Çektiğin kartı oynayabilir ya da pas geçebilirsin.',
+      'st.pick': 'Sıra sende: parlayan bir kart seç.',
+      'st.mustDraw': 'Oynanabilir kartın yok: desteden çek.',
+      'st.wild': 'Joker: istediğin taşı seç.',
+      'st.piece': '{piece} seç. {color} şeride gidersen rakip 1 kart çeker.',
+      'st.target': 'Hedef kareyi seç.',
+      'warn.onlyDrawn': 'Sadece çektiğin kartı oynayabilir ya da pas geçebilirsin.',
+      'warn.noMove': 'Bu kartla yapılabilecek bir hamle yok.',
+      'warn.noMatch': 'Bu kart eşleşmiyor: renk veya sembol aynı olmalı.',
+
+      // oyun sonu
+      'end.win': 'Kazandın! 🏆',
+      'end.lose': 'Kaybettin',
+      'reason.king': 'Şah alındı',
+      'reason.empty': 'Elindeki tüm kartları bitirdi',
+      'reason.time': 'Süre bitti',
+      'reason.resign.me': 'Pes ettin',
+      'reason.resign': 'Rakip pes etti',
+      'end.oppWants': ' Rakip tekrar oynamak istiyor!',
+
+      // hamle geçmişi
+      'log.start': 'Oyun başladı. İlk kart: {card}',
+      'log.reshuffle': 'Deste bitti, atılan kartlar karıştırıldı.',
+      'log.captured': '{piece} aldı',
+      'log.promo': 'piyon vezir oldu!',
+      'log.newColor': 'yeni renk:',
+      'log.again': 'tekrar oynuyor',
+      'log.drewN': '{name} {n} kart çekti',
+      'log.drewN.me': '{n} kart çektin',
+      'log.bonus': 'renk bonusu',
+      'log.emptied': '{name} elindeki tüm kartları bitirdi!',
+      'log.emptied.me': 'Elindeki tüm kartları bitirdin!',
+      'log.noCards': '{name}: çekecek kart yok.',
+      'log.drewPassed': '{name} kart çekti ve sırasını geçti.',
+      'log.drewPassed.me': 'Kart çektin ve sıran geçti.',
+      'log.drew': '{name} kart çekti.',
+      'log.drew.me': 'Kart çektin.',
+      'log.passed': '{name} sırasını geçti.',
+      'log.passed.me': 'Sıranı geçtin.',
+      'log.timeout': '{name} süresi bitti!',
+      'log.timeout.me': 'Süren bitti!',
+      'log.resign': '{name} pes etti.',
+      'log.resign.me': 'Pes ettin.',
+      'log.lesson': 'Ders {n}: {title}',
+
+      // saat
+      'tc.label': '⏱ Süre',
+      'tc.none': 'Süresiz',
+      'tc.min': '{m} dk', 'tc.minInc': '{m} dk + {s} sn',
+
+      // lobi
+      'lobby.resume': '↩︎ Devam eden oyuna dön',
+      'lobby.tutorial': '🎓 Nasıl oynanır?',
+      'lobby.tutorialSub': '2 dakikalık eğitim',
+      'lobby.bot': '🤖 Bota karşı oyna',
+      'lobby.level': 'Bot seviyesi',
+      'lobby.online': 'Online oyna',
+      'lobby.quick': '⚡ Hızlı eşleş',
+      'lobby.host': '➕ Arkadaşınla oyna (oda oluştur)',
+      'lobby.codePh': 'KOD',
+      'lobby.join': 'Odaya katıl',
+      'lobby.install': '📲 Uygulamayı yükle',
+      'lobby.ios': '📲 Uygulama gibi kullanmak için: <b>Paylaş</b> → <b>Ana Ekrana Ekle</b>',
+      'lobby.yourCode': 'Oda kodun:',
+      'lobby.share': 'Bu kodu arkadaşına gönder ya da linki paylaş.',
+      'lobby.copy': 'Linki kopyala',
+      'lobby.copied': 'Kopyalandı ✓',
+      'lobby.waitFriend': 'Arkadaşın bekleniyor…',
+      'lobby.cancel': 'İptal',
+      'lobby.searching': 'Rakip aranıyor…',
+      'lobby.searchInfo': 'Aynı süre ayarını seçen ilk oyuncuyla eşleşeceksin. Oyun yeni olduğu için bekleme uzun sürebilir; arkadaşına da "Hızlı eşleş"e basmasını söyleyebilirsin.',
+      'lobby.joining': '<b>{code}</b> odasına bağlanılıyor…',
+      'lobby.resuming': 'Oyununa geri dönülüyor…',
+
+      // online
+      'net.connected': '● Bağlı · {label}',
+      'net.oppOffline': '● Rakip çevrimdışı · {label}',
+      'net.room': 'Oda {code}',
+      'net.quick': 'Hızlı oyun',
+      'confirm.newGame': 'Yeni oyuna başlansın mı?',
+      'confirm.leave': 'Menüye dönülsün mü? Oyun sunucuda devam eder, buradan geri dönebilirsin.',
+      'confirm.resign': 'Pes etmek istediğine emin misin?',
+      'err.code': '4 harfli oda kodunu gir.',
+      'err.noOnline': 'Online mod yüklenemedi. İnternet bağlantını kontrol et.',
+      'err.gone': 'Oyun artık mevcut değil.',
+      'err.cancelled': 'Oda kapatıldı.',
+      'err.network': 'Sunucuya ulaşılamadı. İnternet bağlantını kontrol et.',
+      'err.notFound': 'Oyun bulunamadı.',
+      'err.notPlayer': 'Bu oyunun oyuncusu değilsin.',
+      'err.busy': 'Sunucu meşgul, tekrar dene.',
+      'err.createFailed': 'Oda açılamadı, tekrar dene.',
+      'err.noRoom': 'Bu kodla açık bir oda bulunamadı.',
+      'err.roomFull': 'Bu oda dolu.',
+      'err.joinFailed': 'Odaya katılınamadı, tekrar dene.',
+      'err.quickFailed': 'Eşleşme başlatılamadı, tekrar dene.',
+      'err.notStarted': 'Oyun henüz başlamadı.',
+      'err.notOver': 'Oyun henüz bitmedi.',
+      'err.over': 'Oyun bitti.',
+      'err.notTurn': 'Sıra sende değil.',
+      'err.alreadyDrew': 'Zaten kart çektin.',
+      'err.mustDraw': 'Önce kart çekmelisin.',
+      'err.noCard': 'Bu kart elinde yok.',
+      'err.onlyDrawn': 'Sadece çektiğin kartı oynayabilirsin.',
+      'err.illegal': 'Geçersiz hamle.',
+      'err.noColor': 'Renk seçilmedi.',
+      'err.generic': 'Bir hata oluştu, tekrar dene.',
+
+      // eğitim
+      'tut.continue': 'Devam etmek için "Devam" düğmesine bas.',
+      'tut.1.title': 'Kart eşleştirme',
+      'tut.1.s1': 'Hamle yapmak için kart oynarsın. Kart, ortadaki kartla <b>aynı renkte</b> ya da <b>aynı sembolde</b> olmalı.<br>Ortada {top} var. Elindeki {good} sembolü tuttuğu için parlıyor. Ona tıkla, sonra bir piyonunu seçip ileri sür.',
+      'tut.1.e1': 'Mavi Piyon kartını oyna.',
+      'tut.1.done': 'Harika! Kartın üzerindeki taş, hangi taşını oynatacağını belirler. Geçerli renk artık <b>Mavi</b> oldu.',
+      'tut.2.title': 'Renk bonusu',
+      'tut.2.s1': 'Tahtanın sütunları renklidir: <span class="zc0">a–b kırmızı</span>, <span class="zc1">c–d mavi</span>, <span class="zc2">e–f yeşil</span>, <span class="zc3">g–h sarı</span>.<br>Taşını <b>kartın rengindeki şeride</b> götürürsen rakip 1 kart çeker! {good} kartını oyna ve b1\'deki atını <b>c3</b>\'e götür.',
+      'tut.2.e1': 'Bonus için atı mavi şeride (c veya d sütunu) götür: b1 → c3.',
+      'tut.2.done': '<b>Renk bonusu!</b> Rakip 1 kart çekti. Elindeki kartları bitiren de kazanır, bu yüzden rakibe kart çektirmek çok değerli.',
+      'tut.3.title': 'Atla ve +2',
+      'tut.3.s1': '{skip} kartı rakibin sırasını atlatır, <b>sen tekrar oynarsın</b>. Onu oyna.',
+      'tut.3.e1': 'Önce Atla kartını oyna.',
+      'tut.3.s2': 'Sıra hâlâ sende! Şimdi {d2} kartını oyna: rakip 2 kart çeker.',
+      'tut.3.e2': '+2 kartını oyna.',
+      'tut.3.done': 'Rakip 2 kart çekti. Atla ve +2 kartları, özellikle rakibin az kartı kaldığında çok güçlüdür.',
+      'tut.4.title': 'Joker',
+      'tut.4.s1': '{joker} her zaman oynanabilir ve <b>istediğin taşı</b> oynatır. Sonra yeni rengi sen seçersin.<br>Rakibin atı c3\'e kadar gelmiş! Jokeri seç ve b2 ya da d2 piyonunla atı al.',
+      'tut.4.e1': 'c3\'teki atı al: b2 ya da d2 piyonunu seç.',
+      'tut.4.done': 'Atı aldın ve rengi sen belirledin. Jokeri zor anlar için saklamak genelde iyi bir fikirdir.',
+      'tut.5.title': 'Kart çekme',
+      'tut.5.s1': 'Elindeki kartların hiçbiri ortadaki kartla eşleşmiyor. <b>Kart çek</b> düğmesine (desteye) tıklayıp 1 kart çek.',
+      'tut.5.e1': 'Desteden kart çek.',
+      'tut.5.s2': 'Çektiğin {drawn} oynanabiliyor, hemen oynayabilirsin! Bir piyonunu ileri sür.',
+      'tut.5.e2': 'Çektiğin Yeşil Piyon kartını oyna.',
+      'tut.5.done': 'Çektiğin kart oynanamasaydı sıra rakibe geçerdi. İstersen oynayabileceğin bir kart varken de kart çekebilirsin.',
+      'tut.6.title': 'Şahı al',
+      'tut.6.s1': '<b>Şah çekme kuralı yoktur</b>: rakibin şahını alırsan oyunu hemen kazanırsın!<br>Vezirin h5\'te ve siyah şah korumasız. {queen} kartını oyna ve <b>e8</b>\'deki şahı al.',
+      'tut.6.e1': 'Vezirle e8\'deki şahı al.',
+      'tut.6.done': '<b>Kazandın!</b> Aynı şey senin şahının da başına gelebilir, onu korumasız bırakma. Elindeki <b>tüm kartları bitirmek</b> de oyunu kazandırır.',
+    },
+
+    en: {
+      brand: 'Chromate',
+      tagline: 'chess with cards',
+      'doc.title': 'Chromate — Chess with Cards',
+      'doc.desc': 'Chromate: a chess board and colorful cards. Play against the bot or online with friends.',
+      'lobby.sub': 'A chess board. Colorful cards.',
+
+      'hdr.rules': 'Rules',
+      'hdr.speed': 'Bot speed',
+      'speed.slow': 'Slow', 'speed.normal': 'Normal', 'speed.fast': 'Fast',
+      'hdr.resign': '🏳 Resign',
+      'hdr.new': 'New Game',
+      'hdr.lang': 'Language',
+      'sound.off': 'Mute', 'sound.on': 'Unmute',
+
+      'rules.title': 'How to play',
+      'rules.1': 'You move by playing a card. It must match the top card in <b>color</b> or <b>symbol</b>.',
+      'rules.2': '<b>Piece card</b>: move a piece of the type shown on the card.',
+      'rules.3': '<b>Color bonus</b>: if your piece lands in the <b>lane of the card\'s color</b> (a–b red, c–d blue, e–f green, g–h yellow), your opponent draws 1 card.',
+      'rules.4': '<b>⏭ Skip</b>: your opponent loses their turn and you play again.',
+      'rules.5': '<b>+2</b>: your opponent draws 2 cards.',
+      'rules.6': '<b>★ Wild</b>: can always be played. Move any piece anywhere it can legally go, then pick the new color.',
+      'rules.7': 'If you can\'t (or don\'t want to) play, draw 1 card. If the drawn card is playable you may play it right away; otherwise your turn ends.',
+      'rules.8': '<b>To win</b>, capture the enemy king or empty your hand. There is no check rule — guarding your king is up to you!',
+      'rules.9': 'No castling or en passant. Pawns reaching the last rank become queens.',
+      'rules.10': '<b>Time</b>: in timed games your clock runs on your turn. The increment (if any) is added after each move. Run out of time and you lose.',
+
+      'coach.exit': 'Exit tutorial',
+      'coach.next': 'Next →',
+      'coach.play': 'Play the bot 🤖',
+      'coach.step': 'Lesson {n}/{total} · {title}',
+      'pile.top': 'Top card',
+      'pile.deck': 'Deck ({n})',
+      'pile.draw': 'Draw',
+      'pile.pass': 'Pass',
+      'active.color': 'Current color:',
+      'log.title': 'Move history',
+      'color.pick': 'Pick the new color',
+      'again': 'Play Again',
+      'again.wait': 'Waiting for opponent…',
+      'cards.count': '{name} · {n} cards',
+
+      'name.you': 'You',
+      'name.bot': 'Bot ({level})',
+      'name.botPlain': 'Bot',
+      'name.opp': 'Opponent',
+      'level.easy': 'Easy', 'level.normal': 'Medium', 'level.hard': 'Hard',
+
+      'color.0': 'Red', 'color.1': 'Blue', 'color.2': 'Green', 'color.3': 'Yellow',
+      'piece.p': 'Pawn', 'piece.n': 'Knight', 'piece.b': 'Bishop', 'piece.r': 'Rook', 'piece.q': 'Queen', 'piece.k': 'King',
+      'card.skip': 'Skip', 'card.draw2': 'Draw 2', 'card.wild': 'Wild',
+      'label.skip': '{color} Skip', 'label.draw2': '{color} +2', 'label.piece': '{color} {piece}',
+
+      'st.win': 'You won!',
+      'st.won': '{name} won.',
+      'st.botThinking': 'Bot is thinking…',
+      'st.oppTurn': 'Opponent\'s turn…',
+      'st.sending': 'Sending…',
+      'st.drawn': 'Play the card you drew, or pass.',
+      'st.pick': 'Your turn: pick a glowing card.',
+      'st.mustDraw': 'No playable cards: draw from the deck.',
+      'st.wild': 'Wild: pick any piece.',
+      'st.piece': 'Pick a {piece}. Land in the {color} lane and your opponent draws 1.',
+      'st.target': 'Pick the target square.',
+      'warn.onlyDrawn': 'You can only play the card you drew, or pass.',
+      'warn.noMove': 'This card has no legal move right now.',
+      'warn.noMatch': 'This card doesn\'t match: same color or symbol needed.',
+
+      'end.win': 'You won! 🏆',
+      'end.lose': 'You lost',
+      'reason.king': 'King captured',
+      'reason.empty': 'All cards played',
+      'reason.time': 'Out of time',
+      'reason.resign.me': 'You resigned',
+      'reason.resign': 'Opponent resigned',
+      'end.oppWants': ' Your opponent wants a rematch!',
+
+      'log.start': 'Game started. First card: {card}',
+      'log.reshuffle': 'Deck ran out; the discard pile was reshuffled.',
+      'log.captured': 'took a {piece}',
+      'log.promo': 'pawn promoted to queen!',
+      'log.newColor': 'new color:',
+      'log.again': 'plays again',
+      'log.drewN': '{name} drew {n}',
+      'log.drewN.me': 'you drew {n}',
+      'log.bonus': 'color bonus',
+      'log.emptied': '{name} played their last card!',
+      'log.emptied.me': 'You played your last card!',
+      'log.noCards': '{name}: no cards left to draw.',
+      'log.drewPassed': '{name} drew and passed.',
+      'log.drewPassed.me': 'You drew and passed.',
+      'log.drew': '{name} drew a card.',
+      'log.drew.me': 'You drew a card.',
+      'log.passed': '{name} passed.',
+      'log.passed.me': 'You passed.',
+      'log.timeout': '{name} ran out of time!',
+      'log.timeout.me': 'You ran out of time!',
+      'log.resign': '{name} resigned.',
+      'log.resign.me': 'You resigned.',
+      'log.lesson': 'Lesson {n}: {title}',
+
+      'tc.label': '⏱ Time',
+      'tc.none': 'No clock',
+      'tc.min': '{m} min', 'tc.minInc': '{m} min + {s}s',
+
+      'lobby.resume': '↩︎ Back to your game',
+      'lobby.tutorial': '🎓 How to play',
+      'lobby.tutorialSub': '2-minute tutorial',
+      'lobby.bot': '🤖 Play the bot',
+      'lobby.level': 'Bot level',
+      'lobby.online': 'Play online',
+      'lobby.quick': '⚡ Quick match',
+      'lobby.host': '➕ Play a friend (create room)',
+      'lobby.codePh': 'CODE',
+      'lobby.join': 'Join room',
+      'lobby.install': '📲 Install the app',
+      'lobby.ios': '📲 To use it like an app: <b>Share</b> → <b>Add to Home Screen</b>',
+      'lobby.yourCode': 'Your room code:',
+      'lobby.share': 'Send this code to a friend or share the link.',
+      'lobby.copy': 'Copy link',
+      'lobby.copied': 'Copied ✓',
+      'lobby.waitFriend': 'Waiting for your friend…',
+      'lobby.cancel': 'Cancel',
+      'lobby.searching': 'Looking for an opponent…',
+      'lobby.searchInfo': 'You\'ll be matched with the first player who picked the same time control. The game is new, so this may take a while — you can also ask a friend to hit "Quick match".',
+      'lobby.joining': 'Joining room <b>{code}</b>…',
+      'lobby.resuming': 'Getting back to your game…',
+
+      'net.connected': '● Connected · {label}',
+      'net.oppOffline': '● Opponent offline · {label}',
+      'net.room': 'Room {code}',
+      'net.quick': 'Quick match',
+      'confirm.newGame': 'Start a new game?',
+      'confirm.leave': 'Back to the menu? The game keeps going on the server and you can return to it.',
+      'confirm.resign': 'Are you sure you want to resign?',
+      'err.code': 'Enter the 4-letter room code.',
+      'err.noOnline': 'Online mode couldn\'t load. Check your internet connection.',
+      'err.gone': 'This game no longer exists.',
+      'err.cancelled': 'The room was closed.',
+      'err.network': 'Can\'t reach the server. Check your internet connection.',
+      'err.notFound': 'Game not found.',
+      'err.notPlayer': 'You\'re not a player in this game.',
+      'err.busy': 'Server is busy, please try again.',
+      'err.createFailed': 'Couldn\'t create a room, please try again.',
+      'err.noRoom': 'No open room with this code.',
+      'err.roomFull': 'This room is full.',
+      'err.joinFailed': 'Couldn\'t join the room, please try again.',
+      'err.quickFailed': 'Couldn\'t start matchmaking, please try again.',
+      'err.notStarted': 'The game hasn\'t started yet.',
+      'err.notOver': 'The game isn\'t over yet.',
+      'err.over': 'The game is over.',
+      'err.notTurn': 'It\'s not your turn.',
+      'err.alreadyDrew': 'You already drew a card.',
+      'err.mustDraw': 'You need to draw first.',
+      'err.noCard': 'That card isn\'t in your hand.',
+      'err.onlyDrawn': 'You can only play the card you drew.',
+      'err.illegal': 'Illegal move.',
+      'err.noColor': 'No color picked.',
+      'err.generic': 'Something went wrong, please try again.',
+
+      'tut.continue': 'Press "Next" to continue.',
+      'tut.1.title': 'Matching cards',
+      'tut.1.s1': 'You move by playing a card. It must match the top card in <b>color</b> or <b>symbol</b>.<br>The top card is {top}. Your {good} matches the symbol, so it glows. Tap it, then pick a pawn and push it forward.',
+      'tut.1.e1': 'Play the Blue Pawn card.',
+      'tut.1.done': 'Great! The piece on the card decides which piece you move. The current color is now <b>Blue</b>.',
+      'tut.2.title': 'Color bonus',
+      'tut.2.s1': 'The board\'s columns are colored: <span class="zc0">a–b red</span>, <span class="zc1">c–d blue</span>, <span class="zc2">e–f green</span>, <span class="zc3">g–h yellow</span>.<br>Move a piece into <b>the lane of the card\'s color</b> and your opponent draws 1 card! Play {good} and jump the b1 knight to <b>c3</b>.',
+      'tut.2.e1': 'For the bonus, land the knight in the blue lane (c or d file): b1 → c3.',
+      'tut.2.done': '<b>Color bonus!</b> Your opponent drew 1 card. Emptying your hand also wins, so making your opponent draw is very valuable.',
+      'tut.3.title': 'Skip and +2',
+      'tut.3.s1': '{skip} makes your opponent lose their turn, so <b>you play again</b>. Play it.',
+      'tut.3.e1': 'Play the Skip card first.',
+      'tut.3.s2': 'Still your turn! Now play {d2}: your opponent draws 2 cards.',
+      'tut.3.e2': 'Play the +2 card.',
+      'tut.3.done': 'Your opponent drew 2 cards. Skip and +2 are especially strong when your opponent is low on cards.',
+      'tut.4.title': 'Wild',
+      'tut.4.s1': '{joker} can always be played and moves <b>any piece</b>. Then you pick the new color.<br>An enemy knight has reached c3! Pick the Wild and capture it with the b2 or d2 pawn.',
+      'tut.4.e1': 'Capture the knight on c3 with the b2 or d2 pawn.',
+      'tut.4.done': 'You took the knight and chose the color. Saving Wilds for tough moments is usually a good idea.',
+      'tut.5.title': 'Drawing',
+      'tut.5.s1': 'None of your cards match the top card. Tap the <b>Draw</b> button (the deck) to draw 1 card.',
+      'tut.5.e1': 'Draw a card from the deck.',
+      'tut.5.s2': 'The {drawn} you drew is playable, so you can play it right away! Push a pawn.',
+      'tut.5.e2': 'Play the Green Pawn you drew.',
+      'tut.5.done': 'If the drawn card couldn\'t be played, your turn would have ended. You may also draw even when you have a playable card.',
+      'tut.6.title': 'Capture the king',
+      'tut.6.s1': '<b>There is no check rule</b>: capture the enemy king and you win instantly!<br>Your queen is on h5 and the black king is unguarded. Play {queen} and take the king on <b>e8</b>.',
+      'tut.6.e1': 'Take the king on e8 with your queen.',
+      'tut.6.done': '<b>You won!</b> The same can happen to your king, so never leave it unguarded. Playing <b>all your cards</b> wins the game too.',
+    },
+  };
+
+  const pick = () => {
+    const saved = localStorage.getItem('sahkart-lang');
+    if (DICT[saved]) return saved;
+    const langs = navigator.languages || [navigator.language || 'en'];
+    return langs.some(l => /^tr\b/i.test(l)) ? 'tr' : 'en';
+  };
+  let lang = pick();
+  const listeners = [];
+
+  function t(key, params) {
+    let s = DICT[lang][key];
+    if (s === undefined) s = DICT.en[key];
+    if (s === undefined) return key;
+    if (params) s = s.replace(/\{(\w+)\}/g, (m, k) => (params[k] !== undefined ? params[k] : m));
+    return s;
+  }
+  const has = key => DICT[lang][key] !== undefined;
+
+  // Sayfadaki sabit metinleri seçili dile çevir
+  function apply(root = document) {
+    document.documentElement.lang = lang;
+    document.title = t('doc.title');
+    const meta = (sel, v) => { const el = document.querySelector(sel); if (el) el.setAttribute('content', v); };
+    meta('meta[name="description"]', t('doc.desc'));
+    meta('meta[name="apple-mobile-web-app-title"]', t('brand'));
+    const man = document.querySelector('link[rel="manifest"]');
+    if (man) man.href = lang === 'tr' ? 'manifest-tr.webmanifest' : 'manifest.webmanifest';
+    root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    root.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
+    root.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+    root.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+    root.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+  }
+
+  function set(l) {
+    if (!DICT[l] || l === lang) return;
+    lang = l;
+    localStorage.setItem('sahkart-lang', l);
+    apply();
+    listeners.forEach(fn => fn(l));
+  }
+
+  return { t, has, apply, set, onChange: fn => listeners.push(fn), get lang() { return lang; }, langs: Object.keys(DICT) };
+})();
+const t = I18N.t;

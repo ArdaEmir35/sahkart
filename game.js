@@ -1,206 +1,72 @@
-// Şahkart: oyun akışı, arayüz, bot ve online mod
+// Şahkart / Chromate: arayüz, bot, eğitim ve online mod. Oyun kuralları core.js'te.
 const R = Rules;
-const HAND_SIZE = 7;
 
 // mode: 'bot' (bota karşı), 'tutorial' (eğitim), 'online' (sunucu üzerinden arkadaşla / hızlı eşleşme)
 let mode = 'bot';
 let ME = 0;            // bu tarayıcıdaki oyuncu: 0 = beyaz, 1 = siyah
-let S = null;          // oyun durumu (guest'te host'tan gelen kopya)
+let S = null;          // oyun durumu (online'da sunucudan gelen kopya)
 let ui = { card: null, from: null };
 let botDelay = 800, botBusy = false, modalOpen = false, pending = false, rematchAsked = false;
 let lastV = -1, oppOnline = true, claimAt = 0, presenceTimer = null;
 let serverMeta = { status: '', rematch: [false, false] };
-let recvAt = 0;        // guest: son durumun geldiği an (saat hesabı için)
+let recvAt = 0;        // online: son durumun geldiği an (saat hesabı için)
 
 // Süre ayarı: "saniye+artış" (ör. "300+3"), "0" = süresiz
 let timeControl = localStorage.getItem('sahkart-tc') || '300+3';
-function parseTC(v) {
-  const [base, inc] = String(v).split('+').map(Number);
-  return base > 0 ? { base: base * 1000, inc: (inc || 0) * 1000 } : null;
-}
 
 const $ = s => document.querySelector(s);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const isWhite = side => side === 0;
-const nameOf = side => (side === ME ? 'Sen' : mode === 'bot' ? 'Bot (' + LEVELS[botLevel].name + ')' : mode === 'tutorial' ? 'Bot' : 'Rakip');
-const topCard = () => S.discard[S.discard.length - 1];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const topCard = () => Core.topCard(S);
+const optionsFor = side => Core.optionsFor(S, side);
 
-// ---------- oyun mantığı (sadece bot modunda ve host'ta çalışır) ----------
+function nameOf(side) {
+  if (side === ME) return t('name.you');
+  if (mode === 'bot') return t('name.bot', { level: t('level.' + botLevel) });
+  if (mode === 'tutorial') return t('name.botPlain');
+  return t('name.opp');
+}
+
+function cardLabel(card) {
+  if (card.kind === 'wild') return t('card.wild');
+  const color = t('color.' + card.color);
+  if (card.kind === 'skip') return t('label.skip', { color });
+  if (card.kind === 'draw2') return t('label.draw2', { color });
+  return t('label.piece', { color, piece: t('piece.' + card.piece) });
+}
+
+// ---------- yerel oyun (bot ve eğitim) ----------
 function newGame() {
-  const deck = R.buildDeck();
-  S = {
-    board: R.initialBoard(), deck, discard: [], hands: [[], []],
-    activeColor: 0, turn: 0, over: false, winner: null, reason: '',
-    lastMove: null, drawn: null, log: [],
-    gameId: Math.random().toString(36).slice(2, 8), moveNo: 0, sfx: [], sfxN: 0,
-    clock: null,
-  };
-  const tc = parseTC(timeControl);
-  if (tc) S.clock = { ...tc, left: [tc.base, tc.base], running: 0, since: null };
-  for (let i = 0; i < HAND_SIZE; i++) { S.hands[0].push(deck.pop()); S.hands[1].push(deck.pop()); }
-  const first = S.deck.splice(S.deck.findIndex(c => c.kind === 'piece'), 1)[0];
-  S.discard.push(first);
-  S.activeColor = first.color;
+  S = Core.newGame(timeControl);
   rematchAsked = false;
   botBusy = false;
-  log('Oyun başladı. İlk kart: ' + cardTag(first));
-  startTurn();
+  afterChange();
 }
 
-// Log satırlarında {0}/{1}, her oyuncunun ekranında "Sen" / "Rakip" olarak gösterilir
-function log(msg, side = -1, end = false) {
-  S.log.push({ m: msg, s: side, end });
+// Durum değişti: çiz, sıra bottaysa onu oynat
+function afterChange() {
+  ui = { card: null, from: null };
+  render();
+  if (mode === 'bot' && !S.over && S.turn === 1 && !botBusy) {
+    if (S.drawn) botAfterDraw(); else botTurn();
+  }
 }
 
-// Ses olayları: durumla birlikte gönderilir, iki tarafta da çalınır
-function fx(k) {
-  S.sfx.push({ n: ++S.sfxN, k });
-  if (S.sfx.length > 8) S.sfx.shift();
-}
-
-// ---------- satranç saati ----------
-// Sırası biten tarafın süresinden geçen zamanı düş; hamle yaptıysa artışı ekle
-function clockCharge(addInc) {
-  const k = S.clock;
-  if (!k || k.since == null) return;
-  const now = Date.now();
-  k.left[k.running] = Math.max(0, k.left[k.running] - (now - k.since));
-  if (addInc) k.left[k.running] += k.inc;
-  k.since = now;
+// Yerel eylemi çekirdekte uygula; hata varsa uyar
+function localAct(side, a) {
+  const err = Core.act(S, side, a);
+  if (err) { flash(t('err.' + err)); return err; }
+  afterChange();
+  return null;
 }
 
 function clockLeft(i) {
   const k = S.clock;
-  let t = k.left[i];
+  let ms = k.left[i];
   if (k.since != null && i === k.running && !S.over)
-    t -= mode === 'online' ? k.el + (Date.now() - recvAt) : Date.now() - k.since;
-  return Math.max(0, t);
-}
-
-function drawCards(side, n) {
-  let drawn = 0;
-  for (let i = 0; i < n; i++) {
-    if (!S.deck.length) {
-      if (S.discard.length <= 1) break;
-      const keep = S.discard.pop();
-      S.deck = R.shuffle(S.discard);
-      S.discard = [keep];
-      log('Deste bitti, atılan kartlar karıştırıldı.');
-    }
-    S.hands[side].push(S.deck.pop());
-    drawn++;
-  }
-  return drawn;
-}
-
-function optionsFor(side) {
-  return R.allOptions(S.board, isWhite(side), S.hands[side], topCard(), S.activeColor);
-}
-
-function startTurn() {
-  if (S.over) return sync();
-  const k = S.clock;
-  if (k) {
-    if (k.since == null) k.since = Date.now(); // ilk hamle: saat başlar
-    else clockCharge(true);
-    k.running = S.turn;
-  }
-  ui = { card: null, from: null };
-  S.drawn = null;
-  sync();
-  if (mode === 'bot' && S.turn === 1) botTurn();
-}
-
-function sync() {
-  render();
-}
-
-// Rakibin elini gizleyerek durumun bir kopyasını hazırla
-function viewFor(side) {
-  return {
-    ...S,
-    deck: S.deck.length,
-    clock: S.clock && { ...S.clock, left: [...S.clock.left], el: S.clock.since == null ? 0 : Date.now() - S.clock.since },
-    hands: S.hands.map((h, i) => (i === side ? h : h.map(c => ({ id: c.id })))),
-  };
-}
-
-function play(side, opt, chosenColor) {
-  const { card, move } = opt;
-  const hand = S.hands[side];
-  hand.splice(hand.findIndex(c => c.id === card.id), 1);
-  S.discard.push(card);
-  const opp = 1 - side;
-  let again = false;
-  let text = '{' + side + '}: ' + cardTag(card);
-
-  if (move) {
-    const piece = S.board[move.fr][move.fc];
-    const cap = R.applyMove(S.board, move);
-    S.lastMove = { fr: move.fr, fc: move.fc, tr: move.tr, tc: move.tc, cap: !!cap };
-    S.moveNo++;
-    fx(cap ? 'capture' : 'move');
-    if (move.promo) fx('promo');
-    text += ' → ' + R.GLYPH[piece.t] + '︎ ' + R.sqName(move.fr, move.fc) + '–' + R.sqName(move.tr, move.tc);
-    if (cap) text += ' <b>(' + R.PIECE_NAMES[cap.t] + ' aldı)</b>';
-    if (move.promo) text += ' — piyon vezir oldu!';
-    if (cap && cap.t === 'k') {
-      log(text, side, true);
-      return endGame(side, 'Şah alındı');
-    }
-  }
-
-  if (card.kind === 'wild') {
-    S.activeColor = chosenColor;
-    text += ' · yeni renk: <span class="dot c' + chosenColor + '"></span>' + R.COLOR_NAMES[chosenColor];
-  } else {
-    S.activeColor = card.color;
-  }
-  if (!move) fx('card');
-  if (card.kind === 'skip') { again = true; text += ' — tekrar oynuyor'; fx('skip'); }
-  if (card.kind === 'draw2') { const n = drawCards(opp, 2); text += ' — {' + opp + '} ' + n + ' kart çekti'; fx('penalty'); }
-  if (R.zoneBonus(card, move)) { const n = drawCards(opp, 1); if (n) { text += ' — <i>renk bonusu</i>: {' + opp + '} 1 kart çekti'; fx('penalty'); } }
-
-  log(text, side);
-  if (!hand.length) { log('{' + side + '} elindeki tüm kartları bitirdi!', side, true); return endGame(side, 'Elindeki tüm kartları bitirdi'); }
-
-  S.turn = again ? side : opp;
-  startTurn();
-}
-
-// Desteden 1 kart çeker. Çekilen kart oynanabiliyorsa hemen oynanabilir, yoksa sıra geçer.
-function drawCard(side) {
-  const hand = S.hands[side];
-  const n = drawCards(side, 1);
-  if (!n) { log('{' + side + '}: çekecek kart yok.', side); return passTurn(side); }
-  fx('draw');
-  const card = hand[hand.length - 1];
-  const opts = R.cardOptions(S.board, isWhite(side), card, topCard(), S.activeColor);
-  if (!opts.length) {
-    log('{' + side + '} kart çekti ve sırasını geçti.', side);
-    S.turn = 1 - side;
-    return startTurn();
-  }
-  log('{' + side + '} kart çekti.', side);
-  S.drawn = card.id;
-  if (mode === 'bot' && side === 1) return botAfterDraw(opts);
-  ui = { card: null, from: null };
-  sync();
-}
-
-function passTurn(side) {
-  if (S.drawn) log('{' + side + '} sırasını geçti.', side);
-  S.turn = 1 - side;
-  startTurn();
-}
-
-function endGame(winner, reason) {
-  clockCharge(false);
-  if (S.clock) S.clock.since = null;
-  S.over = true;
-  S.winner = winner;
-  S.reason = reason;
-  sync();
+    ms -= mode === 'online' ? k.el + (Date.now() - recvAt) : Date.now() - k.since;
+  return Math.max(0, ms);
 }
 
 // ---------- oyuncu eylemleri (guest'te host'a gönderilir) ----------
@@ -213,14 +79,14 @@ function doPlay(opt, color) {
     const err = Tutorial.check({ type: 'play', opt, color });
     ui = { card: null, from: null };
     if (err) { render(); return flash(err); }
-    play(ME, opt, color);
+    localAct(ME, { action: 'play', cardId: opt.card.id, move: opt.move, color });
     return Tutorial.advance();
   }
   if (mode === 'online') {
     const m = opt.move;
     return sendAction({ action: 'play', cardId: opt.card.id, move: m && { fr: m.fr, fc: m.fc, tr: m.tr, tc: m.tc }, color });
   }
-  play(ME, opt, color);
+  localAct(ME, { action: 'play', cardId: opt.card.id, move: opt.move, color });
 }
 
 function doDrawOrPass() {
@@ -229,11 +95,11 @@ function doDrawOrPass() {
     const type = S.drawn ? 'pass' : 'draw';
     const err = Tutorial.check({ type });
     if (err) return flash(err);
-    if (type === 'pass') passTurn(ME); else drawCard(ME);
+    localAct(ME, { action: type });
     return Tutorial.advance();
   }
   if (mode === 'online') return sendAction({ action: S.drawn ? 'pass' : 'draw' });
-  if (S.drawn) passTurn(ME); else drawCard(ME);
+  localAct(ME, { action: S.drawn ? 'pass' : 'draw' });
 }
 
 function doRematch() {
@@ -248,7 +114,7 @@ async function sendAction(body) {
   render();
   const res = await Online.call(body);
   pending = false;
-  if (res.error) { render(); flash(res.error); Online.poll(); return; }
+  if (res.error) { render(); flash(errText(res.error)); Online.poll(); return; }
   onServer(res);
 }
 
@@ -257,7 +123,7 @@ function onServer(p) {
   if (!p || p.error || !Online.active || !Online.session || p.id !== Online.session.id) return;
   if (typeof p.v === 'number') { if (p.v < lastV) return; lastV = p.v; }
   serverMeta = { status: p.status, rematch: p.rematch || [false, false] };
-  if (p.status === 'cancelled') { Online.leave(); return lobbyError('Oda kapatıldı.'); }
+  if (p.status === 'cancelled') { Online.leave(); return lobbyError(t('err.cancelled')); }
   if (!p.view) return; // rakip bekleniyor
   if (mode !== 'online') { mode = 'online'; ME = Online.session.side; S = null; hideLobby(); }
   const v = p.view;
@@ -272,12 +138,15 @@ function onServer(p) {
   render();
 }
 
+// Sunucu hata kodunu okunur metne çevir
+const errText = code => (I18N.has('err.' + code) ? t('err.' + code) : t('err.generic'));
+
 function updateNetStatus() {
   if (mode !== 'online' || !Online.session) return setNetStatus('');
   const id = Online.session.id;
-  const label = id.length === 4 ? 'Oda ' + id : 'Hızlı oyun';
-  if (!oppOnline && S && !S.over) setNetStatus('● Rakip çevrimdışı · ' + label, false);
-  else setNetStatus('● Bağlı · ' + label, true);
+  const label = id.length === 4 ? t('net.room', { code: id }) : t('net.quick');
+  if (!oppOnline && S && !S.over) setNetStatus(t('net.oppOffline', { label }), false);
+  else setNetStatus(t('net.connected', { label }), true);
 }
 
 // ---------- insan arayüzü ----------
@@ -287,11 +156,11 @@ function myOptions(card) {
 
 function onCardClick(card) {
   if (!canAct()) return;
-  if (S.drawn && card.id !== S.drawn) return flash('Sadece çektiğin kartı oynayabilir ya da pas geçebilirsin.');
+  if (S.drawn && card.id !== S.drawn) return flash(t('warn.onlyDrawn'));
   const opts = myOptions(card);
   if (!opts.length) return flash(R.matches(card, topCard(), S.activeColor)
-    ? 'Bu kartla yapılabilecek bir hamle yok.'
-    : 'Bu kart eşleşmiyor: renk veya sembol aynı olmalı.');
+    ? t('warn.noMove')
+    : t('warn.noMatch'));
   if (ui.card && ui.card.id === card.id) { ui = { card: null, from: null }; return render(); }
   if (card.kind === 'skip' || card.kind === 'draw2') return doPlay(opts[0]);
   ui = { card, from: null };
@@ -323,9 +192,9 @@ function askColor(cb) {
 // ---------- bot (siyah, side 1) ----------
 // Seviyeler: rastgelelik, hata payı, tehlike ve şah güvenliği ağırlıkları
 const LEVELS = {
-  easy:   { name: 'Kolay', noise: 2.2, blunder: 0.45, hang: 0.15, king: 3,  drawBelow: -4,   smart: false },
-  normal: { name: 'Orta',  noise: 0.35, blunder: 0, hang: 0.75, king: 25, drawBelow: -1.2, smart: false },
-  hard:   { name: 'Zor',   noise: 0.05, blunder: 0, hang: 0.95, king: 32, drawBelow: -0.8, smart: true },
+  easy:   { noise: 2.2, blunder: 0.45, hang: 0.15, king: 3,  drawBelow: -4,   smart: false },
+  normal: { noise: 0.35, blunder: 0, hang: 0.75, king: 25, drawBelow: -1.2, smart: false },
+  hard:   { noise: 0.05, blunder: 0, hang: 0.95, king: 32, drawBelow: -0.8, smart: true },
 };
 let botLevel = LEVELS[localStorage.getItem('sahkart-level')] ? localStorage.getItem('sahkart-level') : 'normal';
 
@@ -338,11 +207,11 @@ async function botTurn() {
   botBusy = false;
   if (S.over || mode !== 'bot') return;
   const best = pickBest(optionsFor(1), 1, LEVELS[botLevel]);
-  if (!best) return drawCard(1);
+  if (!best) return localAct(1, { action: 'draw' });
   playBot(best, 1, LEVELS[botLevel]);
 }
 
-async function botAfterDraw(opts) {
+async function botAfterDraw() {
   const game = S;
   botBusy = true;
   render();
@@ -350,8 +219,9 @@ async function botAfterDraw(opts) {
   if (S !== game) return;
   botBusy = false;
   if (S.over || mode !== 'bot') return;
-  const best = pickBest(opts, 1, LEVELS[botLevel], true);
-  if (best) playBot(best, 1, LEVELS[botLevel]); else passTurn(1);
+  const card = S.hands[1].find(c => c.id === S.drawn);
+  const best = card && pickBest(Core.cardOptions(S, 1, card), 1, LEVELS[botLevel], true);
+  if (best) playBot(best, 1, LEVELS[botLevel]); else localAct(1, { action: 'pass' });
 }
 
 // En iyi seçeneği seç; hepsi kötüyse (eşik altı) null döner ve bot kart çeker
@@ -370,7 +240,7 @@ function pickBest(opts, side, L, afterDraw = false) {
 
 function playBot(opt, side, L) {
   const color = opt.card.kind === 'wild' ? bestColorFor(side, opt.card, L) : undefined;
-  play(side, opt, color);
+  localAct(side, { action: 'play', cardId: opt.card.id, move: opt.move, color });
 }
 
 // Bir seçeneği 'side' tarafı açısından puanlar
@@ -492,10 +362,40 @@ function cardEl(card, opts = {}) {
   if (opts.playable) d.classList.add('playable');
   if (opts.dim) d.classList.add('dim');
   if (opts.selected) d.classList.add('selected');
-  const label = card.kind === 'piece' ? R.PIECE_NAMES[card.piece] : card.kind === 'skip' ? 'Atla' : card.kind === 'draw2' ? 'Çek 2' : 'Joker';
+  const label = card.kind === 'piece' ? t('piece.' + card.piece) : t('card.' + card.kind);
   d.innerHTML = '<span class="corner">' + cardSymbol(card) + '</span><span class="sym">' + cardSymbol(card) + '</span><span class="lbl">' + label + '</span>';
-  d.title = R.cardLabel(card);
+  d.title = cardLabel(card);
   return d;
+}
+
+// Kayıt satırını (olay kodu) seçili dilde HTML'e çevir
+function logHtml(e) {
+  const p = e.p || {};
+  const me = e.s === ME;
+  const name = side => esc(nameOf(side));
+  // "sen" için ayrı cümle varsa onu kullan (ör. "Kart çektin")
+  const say = (key, side, params = {}) => t(side === ME && I18N.has(key + '.me') ? key + '.me' : key, { name: name(side), ...params });
+  switch (e.k) {
+    case 'start': return t('log.start', { card: cardTag(p.card) });
+    case 'reshuffle': return t('log.reshuffle');
+    case 'lesson': return t('log.lesson', { n: p.n, title: t('tut.' + p.n + '.title') });
+    case 'play': {
+      let h = name(e.s) + ': ' + cardTag(p.card);
+      if (p.move) {
+        h += ' → ' + R.GLYPH[p.move.piece] + '︎ ' + p.move.from + '–' + p.move.to;
+        if (p.move.cap) h += ' <b>(' + t('log.captured', { piece: t('piece.' + p.move.cap) }) + ')</b>';
+        if (p.move.promo) h += ' — ' + t('log.promo');
+      }
+      if (p.color != null) h += ' · ' + t('log.newColor') + ' <span class="dot c' + p.color + '"></span>' + t('color.' + p.color);
+      if (p.again) h += ' — ' + t('log.again');
+      if (p.draw2 != null) h += ' — ' + say('log.drewN', 1 - e.s, { n: p.draw2 });
+      if (p.bonus) h += ' — <i>' + t('log.bonus') + '</i>: ' + say('log.drewN', 1 - e.s, { n: p.bonus });
+      return h;
+    }
+    case 'emptied': case 'noCards': case 'drewPassed': case 'drew': case 'passed': case 'timeout': case 'resign':
+      return say('log.' + e.k, e.s);
+  }
+  return '';
 }
 
 let renderedLogLen = 0;
@@ -506,7 +406,7 @@ function renderLog() {
     const el = document.createElement('div');
     const cls = e.s < 0 ? 'sys' : e.end ? (S.winner === ME ? 'win' : 'lose') : e.s === ME ? 'me' : 'bot';
     el.className = 'log-line ' + cls;
-    el.innerHTML = e.m.replace(/\{([01])\}/g, (_, d) => nameOf(+d));
+    el.innerHTML = logHtml(e);
     box.appendChild(el);
   });
   if (S.log.length !== renderedLogLen) { box.scrollTop = box.scrollHeight; renderedLogLen = S.log.length; }
@@ -586,8 +486,8 @@ function playNewSounds() {
 // ---------- saat ----------
 function fmtClock(ms) {
   if (ms < 10000) return (Math.floor(ms / 100) / 10).toFixed(1);
-  const t = Math.ceil(ms / 1000);
-  return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+  const sec = Math.ceil(ms / 1000);
+  return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
 }
 
 let lastTickSec = -1;
@@ -615,10 +515,8 @@ function updateClocks() {
       claimAt = Date.now();
       Online.call({ action: 'state' }).then(onServer);
     }
-  } else if (!S.over && k.since != null && clockLeft(k.running) <= 0) {
-    const loser = k.running;
-    log('{' + loser + '} süresi bitti!', 1 - loser, true);
-    endGame(1 - loser, 'Süre bitti');
+  } else if (!S.over && Core.checkTimeout(S)) {
+    render();
   }
 }
 setInterval(updateClocks, 100);
@@ -649,7 +547,8 @@ function render() {
   const oppHand = $('#opp-hand');
   oppHand.innerHTML = '';
   S.hands[OPP].forEach(c => oppHand.appendChild(cardEl(c, { back: true })));
-  $('#opp-label').textContent = nameOf(OPP) + ' · ' + S.hands[OPP].length + ' kart';
+  $('#opp-label').textContent = t('cards.count', { name: nameOf(OPP), n: S.hands[OPP].length });
+  $('#turn-me').textContent = t('name.you');
 
   const myHand = $('#my-hand');
   myHand.innerHTML = '';
@@ -666,28 +565,29 @@ function render() {
   const pile = $('#pile');
   pile.innerHTML = '';
   pile.appendChild(cardEl(topCard(), { pile: true }));
-  $('#deck-count').textContent = S.deck.length;
+  $('#deck-cap').textContent = t('pile.deck', { n: S.deck.length });
   const ac = $('#active-color');
   ac.className = 'active-color c' + S.activeColor;
-  ac.textContent = R.COLOR_NAMES[S.activeColor];
+  ac.textContent = t('color.' + S.activeColor);
   $('#draw-btn').disabled = !active;
   $('#draw-btn').classList.toggle('hint', !!tutHint.deck);
   $('#coach').classList.toggle('hidden', mode !== 'tutorial');
   document.body.classList.toggle('tutorial', mode === 'tutorial');
   if (mode === 'tutorial') Tutorial.renderCoach();
-  $('#draw-label').textContent = S.turn === ME && S.drawn ? 'Pas geç' : 'Kart çek';
+  $('#draw-label').textContent = S.turn === ME && S.drawn ? t('pile.pass') : t('pile.draw');
 
   // Durum
   const st = $('#status');
   if (!st.classList.contains('warn')) {
     if (mode === 'tutorial') st.textContent = '';
-    else if (S.over) st.textContent = S.winner === ME ? 'Kazandın!' : nameOf(S.winner) + ' kazandı.';
-    else if (S.turn !== ME) st.textContent = mode === 'bot' ? 'Bot düşünüyor…' : 'Rakibin sırası…';
-    else if (pending) st.textContent = 'Gönderiliyor…';
-    else if (!ui.card && S.drawn) st.textContent = 'Çektiğin kartı oynayabilir ya da pas geçebilirsin.';
-    else if (!ui.card) st.textContent = optionsFor(ME).length ? 'Sıra sende: parlayan bir kart seç.' : 'Oynanabilir kartın yok: desteden çek.';
-    else if (!ui.from) st.textContent = ui.card.kind === 'wild' ? 'Joker: istediğin taşı seç.' : R.PIECE_NAMES[ui.card.piece] + ' seç. ' + R.COLOR_NAMES[ui.card.color] + ' şeride gidersen rakip 1 kart çeker.';
-    else st.textContent = 'Hedef kareyi seç.';
+    else if (S.over) st.textContent = S.winner === ME ? t('st.win') : t('st.won', { name: nameOf(S.winner) });
+    else if (S.turn !== ME) st.textContent = mode === 'bot' ? t('st.botThinking') : t('st.oppTurn');
+    else if (pending) st.textContent = t('st.sending');
+    else if (!ui.card && S.drawn) st.textContent = t('st.drawn');
+    else if (!ui.card) st.textContent = optionsFor(ME).length ? t('st.pick') : t('st.mustDraw');
+    else if (!ui.from) st.textContent = ui.card.kind === 'wild' ? t('st.wild')
+      : t('st.piece', { piece: t('piece.' + ui.card.piece), color: t('color.' + ui.card.color) });
+    else st.textContent = t('st.target');
   }
   $('#turn-me').classList.toggle('on', S.turn === ME && !S.over);
   $('#turn-opp').classList.toggle('on', S.turn === OPP && !S.over);
@@ -697,11 +597,11 @@ function render() {
   $('#color-pick').classList.toggle('hidden', !modalOpen);
   $('#result').classList.toggle('hidden', !S.over || modalOpen || mode === 'tutorial');
   if (S.over) {
-    $('#overlay-title').textContent = S.winner === ME ? 'Kazandın! 🏆' : 'Kaybettin';
+    $('#overlay-title').textContent = S.winner === ME ? t('end.win') : t('end.lose');
     const oppWants = mode === 'online' && serverMeta.rematch[1 - ME] && !rematchAsked;
-    const reason = S.reason === 'Rakip pes etti' && S.winner !== ME ? 'Pes ettin' : S.reason;
-    $('#overlay-text').textContent = reason + '.' + (oppWants ? ' Rakip tekrar oynamak istiyor!' : '');
-    $('#again').textContent = rematchAsked ? 'Rakip bekleniyor…' : 'Tekrar Oyna';
+    const reason = S.reason === 'resign' && S.winner !== ME ? t('reason.resign.me') : t('reason.' + S.reason);
+    $('#overlay-text').textContent = reason + '.' + (oppWants ? t('end.oppWants') : '');
+    $('#again').textContent = rematchAsked ? t('again.wait') : t('again');
     $('#again').disabled = rematchAsked;
   }
   $('#resign-btn').classList.toggle('hidden', mode !== 'online' || S.over);
@@ -745,7 +645,7 @@ function startBotGame() {
 
 function noOnline() {
   if (Online.available()) return false;
-  lobbyError('Online mod yüklenemedi. İnternet bağlantını kontrol et.');
+  lobbyError(t('err.noOnline'));
   return true;
 }
 
@@ -779,22 +679,22 @@ async function hostRoom() {
   Online.leave();
   showHosting('');
   const res = await Online.call({ action: 'create', tc: timeControl });
-  if (res.error) return lobbyError(res.error);
+  if (res.error) return lobbyError(errText(res.error));
   showHosting(res.id);
   startSession(res);
 }
 
 async function joinRoom(code) {
   code = (code || '').trim().toUpperCase();
-  if (!/^[A-Z]{4}$/.test(code)) return lobbyError('4 harfli oda kodunu gir.');
+  if (!/^[A-Z]{4}$/.test(code)) return lobbyError(t('err.code'));
   if (noOnline()) return;
   const saved = Online.storedSession(true);
   if (saved && saved.id === code) return resumeSession(saved); // bu sekme zaten bu odadaydı
   Online.leave();
   lobbyView('joining');
-  $('#joining-msg').innerHTML = '<b>' + code + '</b> odasına bağlanılıyor…';
+  $('#joining-msg').innerHTML = t('lobby.joining', { code });
   const res = await Online.call({ action: 'join', code });
-  if (res.error) return lobbyError(res.error);
+  if (res.error) return lobbyError(errText(res.error));
   startSession(res);
 }
 
@@ -804,7 +704,7 @@ async function quickMatch() {
   lobbyView('searching');
   $('#search-tc').textContent = tcSel.options[tcSel.selectedIndex].text;
   const res = await Online.call({ action: 'quick', tc: timeControl });
-  if (res.error) return lobbyError(res.error);
+  if (res.error) return lobbyError(errText(res.error));
   startSession(res);
 }
 
@@ -818,12 +718,12 @@ async function cancelWaiting() {
 async function resumeSession(saved) {
   if (noOnline()) return;
   lobbyView('joining');
-  $('#joining-msg').textContent = 'Oyununa geri dönülüyor…';
+  $('#joining-msg').textContent = t('lobby.resuming');
   startSession({ ...saved, status: 'waiting' });
   const res = await Online.call({ action: 'state' });
   if (res.error || res.status === 'cancelled' || res.status === 'over') {
     Online.leave();
-    return res.status === 'over' ? showMenu() : lobbyError(res.error && !res.network ? 'Oyun artık mevcut değil.' : res.error || '');
+    return res.status === 'over' ? showMenu() : lobbyError(res.error === 'network' ? t('err.network') : res.error ? t('err.gone') : '');
   }
   if (res.status === 'waiting') {
     serverMeta.status = 'waiting';
@@ -842,9 +742,9 @@ $('#draw-btn').onclick = doDrawOrPass;
 $('#again').onclick = doRematch;
 $('#new-game').onclick = () => {
   if (mode === 'tutorial') return showMenu();
-  if (mode === 'bot') return S && !S.over && S.log.length > 2 && !confirm('Yeni oyuna başlansın mı?') ? null : showMenu();
+  if (mode === 'bot') return S && !S.over && S.log.length > 2 && !confirm(t('confirm.newGame')) ? null : showMenu();
   if (S && S.over) return leaveOnline();
-  if (confirm('Menüye dönülsün mü? Oyun sunucuda devam eder, buradan geri dönebilirsin.')) leaveOnline();
+  if (confirm(t('confirm.leave'))) leaveOnline();
 };
 $('#speed').onchange = e => (botDelay = +e.target.value);
 function showLevel() {
@@ -857,14 +757,37 @@ document.querySelectorAll('#level [data-level]').forEach(b => {
   b.onclick = () => { botLevel = b.dataset.level; localStorage.setItem('sahkart-level', botLevel); showLevel(); };
 });
 showLevel();
+// Süre seçeneklerinin etiketleri (dile göre)
+function tcLabel(v) {
+  const [base, inc] = v.split('+').map(Number);
+  if (!base) return t('tc.none');
+  return inc ? t('tc.minInc', { m: base / 60, s: inc }) : t('tc.min', { m: base / 60 });
+}
+function labelTimeControls() {
+  document.querySelectorAll('#time-ctrl option').forEach(o => (o.textContent = tcLabel(o.value)));
+}
+
+// Dil seçimi: üst çubukta ve menüde
+function applyLanguage() {
+  I18N.apply();
+  labelTimeControls();
+  showSound();
+  ['#lang-sel', '#lang-sel-lobby'].forEach(sel => ($(sel).value = I18N.lang));
+  if (mode === 'online') updateNetStatus();
+  lastBoardKey = '';
+  render();
+}
+['#lang-sel', '#lang-sel-lobby'].forEach(sel => ($(sel).onchange = e => I18N.set(e.target.value)));
+I18N.onChange(applyLanguage);
+
 const tcSel = $('#time-ctrl');
 tcSel.value = timeControl;
 if (tcSel.value !== timeControl) tcSel.value = timeControl = '300+3';
 tcSel.onchange = () => { timeControl = tcSel.value; localStorage.setItem('sahkart-tc', timeControl); };
 const soundBtn = $('#sound-btn');
-const showSound = () => { soundBtn.textContent = Sound.isMuted() ? '🔇' : '🔊'; soundBtn.title = Sound.isMuted() ? 'Sesi aç' : 'Sesi kapat'; };
+const showSound = () => { soundBtn.textContent = Sound.isMuted() ? '🔇' : '🔊'; soundBtn.title = Sound.isMuted() ? t('sound.on') : t('sound.off'); };
 soundBtn.onclick = () => { Sound.setMuted(!Sound.isMuted()); showSound(); if (!Sound.isMuted()) Sound.play('move'); };
-showSound();
+applyLanguage();
 $('#rules-btn').onclick = () => $('#rules').classList.toggle('hidden');
 $('#btn-bot').onclick = startBotGame;
 $('#btn-tutorial').onclick = startTutorial;
@@ -878,15 +801,15 @@ $('#cancel-join').onclick = () => { Online.leave(); lobbyError(''); };
 $('#btn-quick').onclick = quickMatch;
 $('#btn-resume').onclick = () => { const s = Online.storedSession(); if (s) resumeSession(s); };
 $('#resign-btn').onclick = () => {
-  if (mode === 'online' && S && !S.over && confirm('Pes etmek istediğine emin misin?')) sendAction({ action: 'resign' });
+  if (mode === 'online' && S && !S.over && confirm(t('confirm.resign'))) sendAction({ action: 'resign' });
 };
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && mode === 'online') Online.poll(); // telefona geri dönünce hemen tazele
 });
 $('#copy-link').onclick = () => {
   navigator.clipboard.writeText($('#room-link').value).then(() => {
-    $('#copy-link').textContent = 'Kopyalandı ✓';
-    setTimeout(() => ($('#copy-link').textContent = 'Linki kopyala'), 1500);
+    $('#copy-link').textContent = t('lobby.copied');
+    setTimeout(() => ($('#copy-link').textContent = t('lobby.copy')), 1500);
   });
 };
 document.addEventListener('keydown', e => {
@@ -904,6 +827,16 @@ function showMenu() {
   lobbyView('menu');
   $('#lobby-error').textContent = '';
 }
+
+// ---------- mobil düzen: ortadaki kart ve deste, telefonda elin hemen üstüne taşınır ----------
+const narrow = matchMedia('(max-width: 700px)');
+function placeTableCenter() {
+  const center = $('#table-center');
+  const target = narrow.matches ? $('#mobile-slot') : $('aside');
+  if (center.parentElement !== target) target.prepend(center);
+}
+narrow.addEventListener('change', placeTableCenter);
+placeTableCenter();
 
 // ---------- PWA: çevrimdışı önbellek ve yükleme ----------
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

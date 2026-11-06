@@ -218,3 +218,33 @@ body.tutorial .board-wrap { --sq: min(58px, calc((100vh - 480px) / 8), calc((100
 .lobby button.resume { background: #ffffff14; border: 1px solid #ffd166; color: #ffd166; margin: 0 0 10px; }
 button.ghost.danger { border-color: #ff8a8a88; color: #ff9a9a; }
 button.ghost.danger:hover { background: #ff8a8a18; }
+
+/* Dil seçimi */
+.lang-sel { margin: 0; padding: 5px 6px; font-weight: 700; }
+.modal.lobby { position: relative; }
+.lobby-lang { position: absolute; top: 12px; right: 12px; font-size: 13px; }
+
+/* Mobil: çentik/ana ekran çubuğu güvenli alanları, çift dokunmada yakınlaştırma yok */
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+button, .sq, .card, select { touch-action: manipulation; }
+.sq, .card, .hand, #board { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+
+@media (max-width: 700px) {
+  header { flex-wrap: nowrap; gap: 6px; padding: 8px 10px; }
+  h1 { font-size: 17px; white-space: nowrap; }
+  .header-right { flex-wrap: nowrap; gap: 5px; font-size: 12px; }
+  .header-right button.ghost { padding: 5px 8px; font-size: 12px; }
+  .header-right select { padding: 4px; font-size: 12px; margin-left: 0; }
+  .speed-lbl { display: none; }
+  .net-status { font-size: 11px; padding: 2px 6px; }
+  /* Masa ortası (ortadaki kart, deste, renk) elin üstünde tek satır */
+  #mobile-slot .table-center { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  #mobile-slot .center { gap: 10px; }
+  #mobile-slot .cap { font-size: 11px; }
+  #mobile-slot #pile .card, #mobile-slot .deck-btn .card { width: 50px; height: 72px; border-width: 3px; }
+  #mobile-slot #pile .card .sym { font-size: 28px; }
+  #mobile-slot #pile .card .lbl { font-size: 8px; }
+  #mobile-slot .active-row { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; }
+  aside { height: 260px; }
+}
+@media (max-width: 380px) { h1 { font-size: 15px; } .header-right button.ghost { padding: 4px 6px; } }

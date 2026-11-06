@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Şahkart — Kartlı Satranç</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Chromate — Chess with Cards</title>
   <meta name="theme-color" content="#12161f">
-  <meta name="description" content="Şahkart: satranç tahtası, renkli kartlar. Bota karşı ya da arkadaşınla online oyna.">
+  <meta name="description" content="Chromate: a chess board and colorful cards. Play against the bot or online with friends.">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Şahkart">
+  <meta name="apple-mobile-web-app-title" content="Chromate">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -17,36 +17,37 @@
 </head>
 <body>
   <header>
-    <h1>♚ Şahkart <small>kartlı satranç</small></h1>
+    <h1>♚ <span data-i18n="brand">Chromate</span> <small data-i18n="tagline">chess with cards</small></h1>
     <div class="header-right">
-      <button id="sound-btn" class="ghost icon" title="Sesi kapat">🔊</button>
-      <button id="rules-btn" class="ghost">Kurallar</button>
+      <select id="lang-sel" class="lang-sel" data-i18n-aria="hdr.lang"><option value="en">EN</option><option value="tr">TR</option></select>
+      <button id="sound-btn" class="ghost icon">🔊</button>
+      <button id="rules-btn" class="ghost" data-i18n="hdr.rules">Rules</button>
       <span id="net-status" class="net-status hidden"></span>
-      <label id="speed-wrap">Bot hızı
+      <label id="speed-wrap"><span class="speed-lbl" data-i18n="hdr.speed">Bot speed</span>
         <select id="speed">
-          <option value="1400">Yavaş</option>
-          <option value="800" selected>Normal</option>
-          <option value="300">Hızlı</option>
+          <option value="1400" data-i18n="speed.slow">Slow</option>
+          <option value="800" selected data-i18n="speed.normal">Normal</option>
+          <option value="300" data-i18n="speed.fast">Fast</option>
         </select>
       </label>
-      <button id="resign-btn" class="ghost danger hidden">🏳 Pes et</button>
-      <button id="new-game" class="ghost">Yeni Oyun</button>
+      <button id="resign-btn" class="ghost danger hidden" data-i18n="hdr.resign">🏳 Resign</button>
+      <button id="new-game" class="ghost" data-i18n="hdr.new">New Game</button>
     </div>
   </header>
 
   <div id="rules" class="hidden">
-    <h3>Nasıl oynanır?</h3>
+    <h3 data-i18n="rules.title">How to play</h3>
     <ul>
-      <li>Hamle yapmak için kart oynarsın. Kart, ortadaki kartla <b>aynı renkte</b> ya da <b>aynı sembolde</b> olmalı.</li>
-      <li><b>Taş kartı</b>: Kartın gösterdiği taşı oynatırsın.</li>
-      <li><b>Renk bonusu</b>: Taşı kartın <b>rengindeki şeride</b> götürürsen (a–b kırmızı, c–d mavi, e–f yeşil, g–h sarı) rakip 1 kart çeker.</li>
-      <li><b>⏭ Atla</b>: Rakibin sırası atlanır, sen tekrar oynarsın.</li>
-      <li><b>+2</b>: Rakip 2 kart çeker.</li>
-      <li><b>★ Joker</b>: Her zaman oynanabilir. İstediğin taşı istediğin yere oynatır, sonra yeni rengi seçersin.</li>
-      <li>Oynanabilir kartın yoksa (ya da istemezsen) desteden 1 kart çekersin. Çektiğin kart oynanabiliyorsa hemen oynayabilirsin, yoksa sıra geçer.</li>
-      <li><b>Kazanmak için</b> rakibin şahını al ya da elindeki tüm kartları bitir. Şah çekme kuralı yoktur, şahını korumak sana kalmış!</li>
-      <li>Rok ve geçerken alma yok. Son sıraya ulaşan piyon vezir olur.</li>
-      <li><b>Süre</b>: Süreli oyunda sıra sendeyken saatin akar. Her hamleden sonra (varsa) artış süresi eklenir. Süresi biten kaybeder.</li>
+      <li data-i18n-html="rules.1"></li>
+      <li data-i18n-html="rules.2"></li>
+      <li data-i18n-html="rules.3"></li>
+      <li data-i18n-html="rules.4"></li>
+      <li data-i18n-html="rules.5"></li>
+      <li data-i18n-html="rules.6"></li>
+      <li data-i18n-html="rules.7"></li>
+      <li data-i18n-html="rules.8"></li>
+      <li data-i18n-html="rules.9"></li>
+      <li data-i18n-html="rules.10"></li>
     </ul>
   </div>
 
@@ -56,8 +57,8 @@
         <div class="coach-head"><span>🎓</span> <b id="coach-step"></b><span id="coach-dots" class="dots"></span></div>
         <p id="coach-text"></p>
         <div class="coach-btns">
-          <button id="coach-exit" class="ghost">Eğitimden çık</button>
-          <button id="coach-next" class="hidden">Devam →</button>
+          <button id="coach-exit" class="ghost" data-i18n="coach.exit">Exit tutorial</button>
+          <button id="coach-next" class="hidden">Next →</button>
         </div>
       </div>
       <div class="hand-row opp-row">
@@ -74,10 +75,11 @@
       </div>
 
       <div id="status"></div>
+      <div id="mobile-slot"></div>
 
       <div class="hand-row">
         <div class="who">
-          <span id="turn-me" class="turn">Sen</span>
+          <span id="turn-me" class="turn" data-i18n="name.you">You</span>
           <span id="clock-me" class="clock hidden"></span>
         </div>
         <div id="my-hand" class="hand"></div>
@@ -85,18 +87,20 @@
     </section>
 
     <aside>
+      <div id="table-center" class="table-center">
       <div class="center">
         <div class="pile-box">
-          <div class="cap">Ortadaki kart</div>
+          <div class="cap" data-i18n="pile.top">Top card</div>
           <div id="pile"></div>
         </div>
         <div class="pile-box">
-          <div class="cap">Deste (<span id="deck-count"></span>)</div>
-          <button id="draw-btn" class="deck-btn"><div class="card back"></div><span id="draw-label">Kart çek</span></button>
+          <div class="cap" id="deck-cap">Deck</div>
+          <button id="draw-btn" class="deck-btn"><div class="card back"></div><span id="draw-label">Draw</span></button>
         </div>
       </div>
-      <div class="active-row">Geçerli renk: <span id="active-color"></span></div>
-      <h2>Hamle geçmişi</h2>
+      <div class="active-row"><span data-i18n="active.color">Current color:</span> <span id="active-color"></span></div>
+      </div>
+      <h2 data-i18n="log.title">Move history</h2>
       <div id="log"></div>
     </aside>
   </main>
@@ -104,90 +108,93 @@
   <div id="overlay" class="hidden">
     <div class="modal">
       <div id="color-pick" class="hidden">
-        <h3>Yeni rengi seç</h3>
+        <h3 data-i18n="color.pick">Pick the new color</h3>
         <div class="colors">
-          <button data-color="0" class="c0">Kırmızı</button>
-          <button data-color="1" class="c1">Mavi</button>
-          <button data-color="2" class="c2">Yeşil</button>
-          <button data-color="3" class="c3">Sarı</button>
+          <button data-color="0" class="c0" data-i18n="color.0"></button>
+          <button data-color="1" class="c1" data-i18n="color.1"></button>
+          <button data-color="2" class="c2" data-i18n="color.2"></button>
+          <button data-color="3" class="c3" data-i18n="color.3"></button>
         </div>
       </div>
       <div id="result" class="hidden">
         <h3 id="overlay-title"></h3>
         <p id="overlay-text"></p>
-        <button id="again">Tekrar Oyna</button>
+        <button id="again">Play Again</button>
       </div>
     </div>
   </div>
 
   <div id="lobby" class="hidden">
     <div class="modal lobby">
+      <select id="lang-sel-lobby" class="lang-sel lobby-lang" data-i18n-aria="hdr.lang"><option value="en">English</option><option value="tr">Türkçe</option></select>
       <div class="logo">♚</div>
-      <h2>Şahkart</h2>
-      <p class="sub">Satranç tahtası, renkli kartlar.</p>
+      <h2 data-i18n="brand">Chromate</h2>
+      <p class="sub" data-i18n="lobby.sub"></p>
 
       <div id="lobby-menu">
-        <label class="tc-row">⏱ Süre
+        <label class="tc-row"><span data-i18n="tc.label">⏱ Time</span>
           <select id="time-ctrl">
-            <option value="0">Süresiz</option>
-            <option value="60+2">1 dk + 2 sn</option>
-            <option value="180+2">3 dk + 2 sn</option>
-            <option value="300+0">5 dk</option>
-            <option value="300+3">5 dk + 3 sn</option>
-            <option value="600+0">10 dk</option>
-            <option value="600+5">10 dk + 5 sn</option>
-            <option value="900+10">15 dk + 10 sn</option>
+            <option value="0"></option>
+            <option value="60+2"></option>
+            <option value="180+2"></option>
+            <option value="300+0"></option>
+            <option value="300+3"></option>
+            <option value="600+0"></option>
+            <option value="600+5"></option>
+            <option value="900+10"></option>
           </select>
         </label>
-        <button id="btn-resume" class="big resume hidden">↩︎ Devam eden oyuna dön</button>
-        <button id="btn-tutorial" class="big tut">🎓 Nasıl oynanır? <small>2 dakikalık eğitim</small></button>
-        <button id="btn-bot" class="big">🤖 Bota karşı oyna</button>
-        <div id="level" class="level-row" role="radiogroup" aria-label="Bot seviyesi">
-          <button data-level="easy">Kolay</button>
-          <button data-level="normal">Orta</button>
-          <button data-level="hard">Zor</button>
+        <button id="btn-resume" class="big resume hidden" data-i18n="lobby.resume"></button>
+        <button id="btn-tutorial" class="big tut"><span data-i18n="lobby.tutorial"></span> <small data-i18n="lobby.tutorialSub"></small></button>
+        <button id="btn-bot" class="big" data-i18n="lobby.bot"></button>
+        <div id="level" class="level-row" role="radiogroup" data-i18n-aria="lobby.level">
+          <button data-level="easy" data-i18n="level.easy"></button>
+          <button data-level="normal" data-i18n="level.normal"></button>
+          <button data-level="hard" data-i18n="level.hard"></button>
         </div>
-        <div class="sep">Arkadaşınla online</div>
-        <button id="btn-quick" class="big quick">⚡ Hızlı eşleş</button>
-        <button id="btn-host" class="big alt">➕ Arkadaşınla oyna (oda oluştur)</button>
+        <div class="sep" data-i18n="lobby.online"></div>
+        <button id="btn-quick" class="big quick" data-i18n="lobby.quick"></button>
+        <button id="btn-host" class="big alt" data-i18n="lobby.host"></button>
         <div class="join-row">
-          <input id="join-code" maxlength="4" placeholder="KOD" autocomplete="off">
-          <button id="btn-join" class="big alt">Odaya katıl</button>
+          <input id="join-code" maxlength="4" data-i18n-ph="lobby.codePh" autocomplete="off" autocapitalize="characters">
+          <button id="btn-join" class="big alt" data-i18n="lobby.join"></button>
         </div>
         <p id="lobby-error" class="err"></p>
-        <button id="btn-install" class="ghost install hidden">📲 Uygulamayı yükle</button>
-        <p id="ios-install" class="install-tip hidden">📲 Uygulama gibi kullanmak için: <b>Paylaş</b> → <b>Ana Ekrana Ekle</b></p>
+        <button id="btn-install" class="ghost install hidden" data-i18n="lobby.install"></button>
+        <p id="ios-install" class="install-tip hidden" data-i18n-html="lobby.ios"></p>
       </div>
 
       <div id="lobby-hosting" class="hidden">
-        <p>Oda kodun:</p>
+        <p data-i18n="lobby.yourCode"></p>
         <div id="room-code" class="room-code">····</div>
-        <p class="sub">Bu kodu arkadaşına gönder ya da linki paylaş.</p>
+        <p class="sub" data-i18n="lobby.share"></p>
         <div class="join-row">
           <input id="room-link" readonly>
-          <button id="copy-link" class="alt">Linki kopyala</button>
+          <button id="copy-link" class="alt" data-i18n="lobby.copy"></button>
         </div>
-        <p class="wait"><span class="spinner"></span> Arkadaşın bekleniyor…</p>
-        <button id="cancel-host" class="ghost">İptal</button>
+        <p class="wait"><span class="spinner"></span> <span data-i18n="lobby.waitFriend"></span></p>
+        <button id="cancel-host" class="ghost" data-i18n="lobby.cancel"></button>
       </div>
 
       <div id="lobby-searching" class="hidden">
-        <p class="wait"><span class="spinner"></span> Rakip aranıyor… <span class="sub">(<span id="search-tc"></span>)</span></p>
-        <p class="sub">Aynı süre ayarını seçen ilk oyuncuyla eşleşeceksin. Oyun yeni olduğu için bekleme uzun sürebilir; arkadaşına da "Hızlı eşleş"e basmasını söyleyebilirsin.</p>
-        <button id="cancel-search" class="ghost">İptal</button>
+        <p class="wait"><span class="spinner"></span> <span data-i18n="lobby.searching"></span> <span class="sub">(<span id="search-tc"></span>)</span></p>
+        <p class="sub" data-i18n="lobby.searchInfo"></p>
+        <button id="cancel-search" class="ghost" data-i18n="lobby.cancel"></button>
       </div>
 
       <div id="lobby-joining" class="hidden">
         <p><span class="spinner"></span> <span id="joining-msg"></span></p>
-        <button id="cancel-join" class="ghost">İptal</button>
+        <button id="cancel-join" class="ghost" data-i18n="lobby.cancel"></button>
       </div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"></script>
+  <script src="i18n.js"></script>
   <script src="online.js"></script>
   <script src="sound.js"></script>
   <script src="rules.js"></script>
+  <script src="core.js"></script>
   <script src="tutorial.js"></script>
   <script src="game.js"></script>
 </body>
